@@ -1,0 +1,17 @@
+<!-- Garmin Connect IQ Manifest for Hebrew Date Data Field -->
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+    <iq:application entry="HebrewDateFieldApp" id="a9e7b5c3d1f2a4b6c8e0d2f4a6b8c0e2" launcherIcon="@Drawables.LauncherIcon" minApiLevel="2.3.0" name="@Strings.AppName" type="watch-app">
+        <iq:products>
+            <!-- Garmin Descent series -->
+            <iq:product id="descentmk1"/>
+            <iq:product id="descentg1"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Positioning"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+            <iq:language>heb</iq:language>
+        </iq:languages>
+    </iq:application>
+</iq:manifest>

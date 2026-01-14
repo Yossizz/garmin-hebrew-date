@@ -1,0 +1,17 @@
+# Monkey Jungle Build Configuration for Hebrew Date Data Field
+
+# Project Configuration
+project.manifest = manifest.xml
+
+# Source files
+base.sourcePath = source
+
+# Resource files
+base.resourcePath = resources
+
+# Device compatibility
+descentmk1.resourcePath = $(descentmk1.resourcePath);resources
+descentg1.resourcePath = $(descentg1.resourcePath);resources
+
+# Language settings
+base.lang = eng;heb
