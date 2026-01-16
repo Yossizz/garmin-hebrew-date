@@ -11,6 +11,14 @@ A Garmin Connect IQ application that displays the Hebrew calendar date in actual
 - Full leap year support (אדר א׳ and אדר ב׳)
 - Accurate date conversion from Gregorian calendar
 
+🧭 **Praying Compass**
+- GPS-powered compass arrow pointing to Jerusalem
+- Visual GPS acquisition indicator (filling circle)
+- Vibration feedback when GPS locks
+- Smooth arrow rotation as you turn the watch
+- Multi-GNSS support (GPS + Galileo) for faster lock times
+- Battery optimized (GPS stops after lock)
+
 📱 **Standalone App**
 - Launch anytime from your watch menu
 - No need to start an activity
@@ -32,6 +40,7 @@ A Garmin Connect IQ application that displays the Hebrew calendar date in actual
 ```
 - **Line 1**: Day of week in Hebrew (Wednesday = רביעי)
 - **Line 2**: Hebrew date (25th of Tevet = כ״ה טבת)
+- **Top-right circle**: GPS acquisition indicator / Compass arrow pointing to Jerusalem
 
 ## Quick Start
 
@@ -74,7 +83,15 @@ openssl genrsa -out developer_key 4096
 The app displays:
 - Current day of week in Hebrew (ראשון through שבת)
 - Hebrew date with proper numerals and month name
+- GPS acquisition circle (top-right) that fills as GPS signal improves
+- Compass arrow (top-right) pointing to Jerusalem after GPS lock
 - Updates automatically at midnight
+
+**GPS Compass Usage:**
+1. Launch the app
+2. Wait for GPS lock (circle fills, watch vibrates)
+3. Arrow appears pointing toward Jerusalem
+4. Rotate your watch - arrow rotates smoothly to maintain direction
 
 ## Hebrew Month Reference
 
@@ -106,7 +123,8 @@ garmin-hebrew-date/
 │   ├── HebrewDateApp.mc    # Application entry point
 │   ├── HebrewDateView.mc   # Main view and UI
 │   ├── HebrewCalendar.mc   # Hebrew calendar logic
-│   └── HebrewFont.mc       # Hebrew text utilities
+│   ├── HebrewFont.mc       # Hebrew text utilities
+│   └── Compass.mc          # GPS and compass calculations
 ├── resources/
 │   ├── drawables/
 │   │   └── launcher_icon.png
@@ -124,9 +142,10 @@ garmin-hebrew-date/
 
 ### Prerequisites
 
-- Connect IQ SDK 2.3.0+
+- Connect IQ SDK 3.2.0+ (for multi-GNSS support)
 - Developer key for signing
 - Garmin device or simulator
+- GPS-enabled device (for compass feature)
 
 ### Building
 
@@ -176,6 +195,16 @@ Hebrew numerals follow traditional formatting:
 - Gershayim (״) for multiple letters: כ״ה, י״א
 - Special handling for 15 (ט״ו) and 16 (ט״ז) to avoid writing God's name
 
+### GPS Compass Feature
+
+The praying compass uses:
+- **Multi-GNSS**: GPS + Galileo constellations for faster lock (15-30 seconds)
+- **Bearing Calculation**: Haversine formula to calculate direction to Jerusalem (31.7781°N, 35.2360°E)
+- **Compass Integration**: Watch magnetometer for smooth arrow rotation
+- **Battery Optimization**: GPS disables after lock, compass activates only when needed
+- **Visual Feedback**: Filling circle shows GPS acquisition progress (0-50%)
+- **Haptic Feedback**: Vibration when GPS achieves lock
+
 ### Font Support
 
 Since Garmin devices don't natively support Hebrew Unicode, the app:
@@ -197,6 +226,20 @@ Since Garmin devices don't natively support Hebrew Unicode, the app:
 - Ensure watch time/date is set correctly
 - Watch needs GPS lock or manual time setting
 - Hebrew calendar is calculated from Gregorian date
+
+### GPS Not Locking
+
+- Go outside with clear view of sky
+- Wait 15-30 seconds for GPS + Galileo lock
+- Ensure watch has GPS enabled in settings
+- First lock may take longer (cold start)
+
+### Compass Arrow Not Rotating
+
+- Ensure GPS has locked (watch vibrated)
+- Rotate watch slowly - arrow should follow
+- Compass requires magnetometer sensor (available on Descent G1)
+- If stuck, restart app
 
 ### Hebrew Text Shows as Boxes
 
@@ -223,11 +266,14 @@ Since Garmin devices don't natively support Hebrew Unicode, the app:
 
 ## Roadmap
 
+- [x] GPS compass pointing to Jerusalem
+- [x] Multi-GNSS support for faster GPS lock
 - [ ] Add widget version
 - [ ] Include Hebrew year display
 - [ ] Add holidays and special dates
 - [ ] Support more Garmin devices
 - [ ] Add customization options
+- [ ] Compass calibration option
 
 ---
 
