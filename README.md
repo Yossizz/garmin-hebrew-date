@@ -1,6 +1,6 @@
 # Hebrew Date App for Garmin Watches 🇮🇱
 
-A Garmin Connect IQ application that displays the Hebrew calendar date in actual Hebrew characters.
+A Garmin Connect IQ application that displays the Hebrew calendar date in actual Hebrew characters and GPS based praying compass to Jerusalem.
 
 ## Features
 
