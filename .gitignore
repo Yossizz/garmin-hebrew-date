@@ -1,0 +1,33 @@
+# Developer key (sensitive - DO NOT COMMIT)
+developer_key
+*.key
+
+# Build artifacts
+*.prg
+*.iq
+*.prg.debug.xml
+*.iq.debug.xml
+
+# Build directories
+bin/
+gen/
+external-mir/
+internal-mir/
+
+# System files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.log
+
+# Documentation drafts (optional - remove if you want to commit these)
+FINAL_SUMMARY.md
+SUCCESS.md
+INSTALL.md
+QUICKSTART.md
+SETUP.md
+push.sh
