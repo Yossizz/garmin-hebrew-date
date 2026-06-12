@@ -32,6 +32,7 @@ class HebrewDateView extends WatchUi.View {
     hidden var mShabbatStartTime;     // Time.Moment for Shabbat start
     hidden var mShabbatEndTime;       // Time.Moment for Shabbat end
     hidden var mIsFriday;             // Boolean: is today Friday?
+    hidden var mIsErevYomTov;         // Boolean: is today Erev Yom Tov?
     hidden var mUsingCachedGps;       // true = times calculated from cached location, not fresh fix
     hidden var mHallelText;           // "הלל" / "חצי הלל" / null
     
@@ -56,6 +57,7 @@ class HebrewDateView extends WatchUi.View {
         mShabbatStartTime = null;
         mShabbatEndTime = null;
         mIsFriday = false;
+        mIsErevYomTov = false;
         mUsingCachedGps = false;
         mHallelText = null;
     }
@@ -72,19 +74,11 @@ class HebrewDateView extends WatchUi.View {
         var actualDayOfWeek = today.day_of_week;
         
         if (TEST_MODE) {
-            // Always pretend it's Friday to test Shabbat times
-            // Find most recent Friday (or today if already Friday)
-            var daysBack = (today.day_of_week == 6) ? 0 : ((today.day_of_week + 1) % 7);
-            if (daysBack == 0) {
-                // today is Friday, use as-is
-            } else {
-                var fridayMoment = now.subtract(new Time.Duration(daysBack * 24 * 60 * 60));
-                var fridayInfo = Gregorian.info(fridayMoment, Time.FORMAT_SHORT);
-                actualDay = fridayInfo.day;
-                actualMonth = fridayInfo.month;
-                actualYear = fridayInfo.year;
-            }
-            actualDayOfWeek = 6; // Friday
+            // Simulate 5 Sivan 5786 = Erev Shavuot (May 21, 2026, Thursday)
+            actualDay = 21;
+            actualMonth = 5;
+            actualYear = 2026;
+            actualDayOfWeek = 5; // Thursday
         }
         
         // Only recalculate if day has changed
@@ -106,7 +100,12 @@ class HebrewDateView extends WatchUi.View {
             // Hebrew day names (Sunday = 1)
             var dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
             
+            // In a non-leap year months 7+ (Nisan onward) must skip the "אדר ב" slot at index 6
             var monthIndex = hebrewDate["month"] - 1;
+            var isLeapYear = HebrewCalendar.isHebrewLeapYear(hebrewDate["year"]);
+            if (!isLeapYear && hebrewDate["month"] >= 7) {
+                monthIndex = hebrewDate["month"]; // use index = month to skip Adar II slot
+            }
             if (monthIndex >= monthNames.size()) {
                 monthIndex = monthNames.size() - 1;
             }
@@ -124,7 +123,7 @@ class HebrewDateView extends WatchUi.View {
             mHebrewDateString = hebrewDayText + " " + monthNames[monthIndex];
 
             // Hallel indicator
-            var isLeap = HebrewCalendar.isHebrewLeapYear(hebrewDate["year"]);
+            var isLeap = isLeapYear;
             var hallelType = Compass.getHallelType(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
             if (hallelType == 1) {
                 mHallelText = "הלל";
@@ -134,37 +133,32 @@ class HebrewDateView extends WatchUi.View {
                 mHallelText = null;
             }
 
-            // Check if today is Friday and calculate Shabbat times if GPS available
-            // Use actualDayOfWeek which accounts for TEST_MODE adjustment
-            var shouldCalculateShabbat = (actualDayOfWeek == 6) && mGpsAvailable && mCurrentLat != null && mCurrentLon != null;
-            
-            System.println("DEBUG: shouldCalculateShabbat=" + shouldCalculateShabbat);
-            System.println("DEBUG: actualDayOfWeek=" + actualDayOfWeek + " TEST_MODE=" + TEST_MODE);
-            System.println("DEBUG: mGpsAvailable=" + mGpsAvailable + " lat=" + mCurrentLat + " lon=" + mCurrentLon);
-            System.println("DEBUG: Using date: " + actualYear + "-" + actualMonth + "-" + actualDay);
-            
-            if (shouldCalculateShabbat) {
-                mIsFriday = true;
-                System.println("DEBUG: Calculating Shabbat times...");
-                mShabbatStartTime = Compass.calculateShabbatStart(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay);
-                mShabbatEndTime = Compass.calculateShabbatEnd(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay);
-                System.println("DEBUG: Start=" + mShabbatStartTime + " End=" + mShabbatEndTime);
+            // Determine whether to show candle lighting / havdalah times
+            var gpsReady = mGpsAvailable && mCurrentLat != null && mCurrentLon != null;
+            var isFriday = (actualDayOfWeek == 6);
+            var erevDays = Compass.getErevYomTov(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
 
-                // In TEST_MODE, fall back to hardcoded Jerusalem times if calculation fails
-                if (TEST_MODE && (mShabbatStartTime == null || mShabbatEndTime == null)) {
-                    System.println("DEBUG: Sunset calc failed, using hardcoded Jerusalem test times");
-                    // ~19:15 candle lighting, ~20:30 havdalah (typical Jerusalem summer)
-                    var baseNow = Time.now();
-                    var todayMidnight = baseNow.subtract(new Time.Duration(baseNow.value() % 86400));
-                    if (mShabbatStartTime == null) {
-                        mShabbatStartTime = todayMidnight.add(new Time.Duration(16 * 3600 + 15 * 60)); // 19:15 Jerusalem = 16:15 UTC
-                    }
-                    if (mShabbatEndTime == null) {
-                        mShabbatEndTime = todayMidnight.add(new Time.Duration(17 * 3600 + 30 * 60 + 86400)); // 20:30 Jerusalem next day = 17:30 UTC+1day
-                    }
+            System.println("DEBUG: isFriday=" + isFriday + " erevDays=" + erevDays + " gpsReady=" + gpsReady);
+            System.println("DEBUG: Using date: " + actualYear + "-" + actualMonth + "-" + actualDay);
+
+            if (gpsReady && (isFriday || erevDays > 0)) {
+                mIsFriday = isFriday;
+                mIsErevYomTov = (erevDays > 0) && !isFriday; // Friday takes priority
+
+                // Candle lighting: same formula for Shabbat and Yom Tov
+                mShabbatStartTime = Compass.calculateShabbatStart(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay);
+
+                // End time: Shabbat = day+1 sunset+40; Yom Tov = day+erevDays sunset+40
+                if (isFriday) {
+                    mShabbatEndTime = Compass.calculateShabbatEnd(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay);
+                } else {
+                    mShabbatEndTime = Compass.calculateYomTovEnd(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay, erevDays);
                 }
+
+                System.println("DEBUG: Start=" + mShabbatStartTime + " End=" + mShabbatEndTime);
             } else {
                 mIsFriday = false;
+                mIsErevYomTov = false;
                 mShabbatStartTime = null;
                 mShabbatEndTime = null;
             }
@@ -380,8 +374,9 @@ class HebrewDateView extends WatchUi.View {
         var circleLeft = width - 57;  // left edge of enlarged circle (width-30-27)
         var textX = circleLeft / 2;
         var hasHallel = (mHallelText != null);
-        var dayY = mIsFriday ? (height / 2 - 35) : (height / 2 - 25);
-        var dateY = mIsFriday ? (height / 2 - 10) : (height / 2 + (hasHallel ? 0 : 10));
+        var showTimes = (mIsFriday || mIsErevYomTov) && mShabbatStartTime != null && mShabbatEndTime != null;
+        var dayY = showTimes ? (height / 2 - 35) : (height / 2 - 25);
+        var dateY = showTimes ? (height / 2 - 10) : (height / 2 + (hasHallel ? 0 : 10));
 
         // Draw day of week (top line)
         dc.drawText(
@@ -412,14 +407,14 @@ class HebrewDateView extends WatchUi.View {
             );
         }
 
-        // Draw Shabbat times if Friday and times are available
-        System.println("DISPLAY: mIsFriday=" + mIsFriday + " start=" + mShabbatStartTime + " end=" + mShabbatEndTime);
-        if (mIsFriday && mShabbatStartTime != null && mShabbatEndTime != null) {
+        // Draw candle lighting / havdalah times (Friday or Erev Yom Tov)
+        System.println("DISPLAY: showTimes=" + showTimes + " start=" + mShabbatStartTime + " end=" + mShabbatEndTime);
+        if (showTimes) {
             var shabbatFont = Graphics.FONT_SMALL;
             
             var startTime = formatTime(mShabbatStartTime);
             var endTime = formatTime(mShabbatEndTime);
-            System.println("DISPLAY: Showing times: " + startTime + " - " + endTime);
+            System.println("DISPLAY: Showing times: " + startTime + " / " + endTime);
             
             // Draw Shabbat times: split at screen center so label and time never overlap
             var split = width / 2;
@@ -436,8 +431,6 @@ class HebrewDateView extends WatchUi.View {
             dc.drawText(split + 3, y1, shabbatFont, startTime, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
             dc.drawText(split - 3, y2, shabbatFont, "יציאה:", Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
             dc.drawText(split + 3, y2, shabbatFont, endTime,   Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-        } else {
-            System.println("DISPLAY: NOT showing Shabbat times");
         }
         
         // PRIORITY 5: Draw compass in top-right circle (secondary feature)

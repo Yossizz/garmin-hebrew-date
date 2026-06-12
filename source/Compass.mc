@@ -307,6 +307,42 @@ module Compass {
     // hMonth numbering (as returned by HebrewCalendar.gregorianToHebrew):
     //   non-leap: 1=Tishrei…6=Adar, 7=Nisan, 8=Iyar, 9=Sivan, 10=Tammuz, 11=Av, 12=Elul
     //   leap:     1=Tishrei…6=Adar I, 7=Adar II, 8=Nisan, 9=Iyar, 10=Sivan, 11=Tammuz, 12=Av, 13=Elul
+    // Returns days until end of Yom Tov if today is Erev Yom Tov, else 0.
+    // Used to calculate both candle lighting (tonight) and יציאה (end of holiday).
+    // Israeli minhag: one-day Yom Tov for all holidays except Rosh Hashana (2 days).
+    function getErevYomTov(hYear, hMonth, hDay, isLeap) {
+        var ELUL  = isLeap ? 13 : 12;
+        var NISAN = isLeap ? 8  : 7;
+        var SIVAN = isLeap ? 10 : 9;
+
+        // 29 Elul = Erev Rosh Hashana (RH is always 2 days)
+        if (hMonth == ELUL && hDay == 29) { return 2; }
+        // 1 Tishrei = RH day 1 — candle lighting for day 2
+        if (hMonth == 1 && hDay == 1)  { return 1; }
+        // 9 Tishrei = Erev Yom Kippur
+        if (hMonth == 1 && hDay == 9)  { return 1; }
+        // 14 Tishrei = Erev Sukkot (Israel: only first day is Yom Tov)
+        if (hMonth == 1 && hDay == 14) { return 1; }
+        // 21 Tishrei = Erev Shemini Atzeret
+        if (hMonth == 1 && hDay == 21) { return 1; }
+        // 14 Nisan = Erev Pesach (Israel: only day 1 is Yom Tov)
+        if (hMonth == NISAN && hDay == 14) { return 1; }
+        // 20 Nisan = Erev last day of Pesach (21 Nisan)
+        if (hMonth == NISAN && hDay == 20) { return 1; }
+        // 5 Sivan = Erev Shavuot (Israel: one day)
+        if (hMonth == SIVAN && hDay == 5)  { return 1; }
+
+        return 0;
+    }
+
+    // Yom Tov end: sunset on (day + daysToEnd) + 40 min.
+    // The JDN formula handles day-overflow across month/year boundaries automatically.
+    function calculateYomTovEnd(lat, lon, year, month, day, daysToEnd) {
+        var sunset = calculateSunset(lat, lon, year, month, day + daysToEnd);
+        if (sunset == null) { return null; }
+        return sunset.add(new Time.Duration(40 * 60));
+    }
+
     // Returns: 0=no Hallel, 1=full Hallel (הלל שלם), 2=half Hallel (חצי הלל)
     function getHallelType(hYear, hMonth, hDay, isLeap) {
         var NISAN  = isLeap ? 8  : 7;

@@ -24,12 +24,12 @@ A Garmin Connect IQ application that displays the Hebrew calendar date in Hebrew
 - Once a real fix arrives, bearing and Shabbat times are updated automatically
 - Small dot indicator shown when times are based on cached location
 
-**Shabbat Times (Fridays only)**
-- Candle lighting: Friday sunset − 35 minutes (Jerusalem standard)
-- Havdalah: Saturday sunset + 40 minutes (Israeli standard / Gra opinion)
+**Shabbat & Yom Tov Times**
+- Shown on Fridays (Shabbat) and Erev Yom Tov days
+- Candle lighting (כניסה): tonight's sunset − 35 min (Jerusalem) / − 18 min (elsewhere)
+- Havdalah (יציאה): end-of-holiday sunset + 40 minutes (Israeli standard / Gra opinion)
+- Yom Tov coverage (Israeli minhag): Erev Rosh Hashana, Rosh Hashana day 1, Erev Yom Kippur, Erev Sukkot, Erev Shemini Atzeret, Erev Pesach, Erev last day of Pesach, Erev Shavuot
 - Astronomical sunset calculated via USNO sunrise equation
-- Jerusalem rule: 35-minute early candle lighting offset
-- Elsewhere: 18-minute offset
 - Times auto-update when fresh GPS confirms your actual location
 
 **Compatible Devices**
@@ -176,6 +176,7 @@ Gauss-based algorithm with:
 - [ ] Widget version
 - [ ] Hebrew year display
 - [x] Hallel indicator (הלל / חצי הלל)
+- [x] Candle lighting & havdalah times for Jewish holidays (Yom Tov)
 - [ ] Jewish holidays
 - [ ] More Garmin devices
 
