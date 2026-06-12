@@ -302,4 +302,71 @@ module Compass {
         }
         return sunset.add(new Time.Duration(40 * 60));
     }
+
+    // Hallel type for a given Hebrew date.
+    // hMonth numbering (as returned by HebrewCalendar.gregorianToHebrew):
+    //   non-leap: 1=Tishrei…6=Adar, 7=Nisan, 8=Iyar, 9=Sivan, 10=Tammuz, 11=Av, 12=Elul
+    //   leap:     1=Tishrei…6=Adar I, 7=Adar II, 8=Nisan, 9=Iyar, 10=Sivan, 11=Tammuz, 12=Av, 13=Elul
+    // Returns: 0=no Hallel, 1=full Hallel (הלל שלם), 2=half Hallel (חצי הלל)
+    function getHallelType(hYear, hMonth, hDay, isLeap) {
+        var NISAN  = isLeap ? 8  : 7;
+        var IYAR   = isLeap ? 9  : 8;
+        var SIVAN  = isLeap ? 10 : 9;
+        var AV     = isLeap ? 12 : 11;
+
+        // --- Full Hallel ---
+        // Sukkot (15–21 Tishrei) + Shemini Atzeret (22 Tishrei)
+        if (hMonth == 1 && hDay >= 15 && hDay <= 22) { return 1; }
+
+        // Chanukah: 25 Kislev onward, plus Tevet 1–2 always, Tevet 3 if Kislev=29
+        if (hMonth == 3 && hDay >= 25) { return 1; }
+        if (hMonth == 4 && hDay <= 3) {
+            if (hDay <= 2) { return 1; }
+            var mlen = HebrewCalendar.getMonthLengths(hYear);
+            if (mlen[2] == 29) { return 1; } // Kislev defective → day 8 falls on 3 Tevet
+        }
+
+        // Passover day 1 (Israel minhag: only 15 Nisan is full Hallel)
+        if (hMonth == NISAN && hDay == 15) { return 1; }
+
+        // Shavuot (6 Sivan)
+        if (hMonth == SIVAN && hDay == 6) { return 1; }
+
+        // Yom Ha'atzmaut (5 Iyar, simplified — no calendar-shift logic)
+        if (hMonth == IYAR && hDay == 5) { return 1; }
+
+        // Yom Yerushalayim (28 Iyar)
+        if (hMonth == IYAR && hDay == 28) { return 1; }
+
+        // --- Half Hallel ---
+        // Remaining Passover days (16–21 Nisan, Israel minhag)
+        if (hMonth == NISAN && hDay >= 16 && hDay <= 21) { return 2; }
+
+        // Rosh Chodesh: day 1 of any month except Tishrei (= Rosh Hashana, no Hallel)
+        if (hDay == 1 && hMonth != 1) { return 2; }
+
+        // Rosh Chodesh: day 30 of months that are always full (30 days)
+        if (hDay == 30) {
+            // Tishrei always 30 → 30 Tishrei = Rosh Chodesh Cheshvan
+            if (hMonth == 1) { return 2; }
+            // Shevat always 30 → 30 Shevat = Rosh Chodesh Adar
+            if (hMonth == 5) { return 2; }
+            // Nisan always 30 → 30 Nisan = Rosh Chodesh Iyar
+            if (hMonth == NISAN) { return 2; }
+            // Sivan always 30 → 30 Sivan = Rosh Chodesh Tammuz
+            if (hMonth == SIVAN) { return 2; }
+            // Av always 30 → 30 Av = Rosh Chodesh Elul
+            if (hMonth == AV) { return 2; }
+            // Adar I in leap year (always 30) → 30 Adar I = Rosh Chodesh Adar II
+            if (isLeap && hMonth == 6) { return 2; }
+            // Cheshvan: 30 only in shalem year
+            if (hMonth == 2) {
+                var mlen2 = HebrewCalendar.getMonthLengths(hYear);
+                if (mlen2[1] == 30) { return 2; }
+            }
+            // Note: 30 Kislev = Rosh Chodesh Tevet but also Chanukah day 6 → full Hallel (handled above)
+        }
+
+        return 0;
+    }
 }

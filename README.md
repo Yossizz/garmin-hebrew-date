@@ -9,6 +9,7 @@ A Garmin Connect IQ application that displays the Hebrew calendar date in Hebrew
 - Hebrew numerals (כ״ה, ט״ו, etc.)
 - Hebrew month names (תשרי, חשוון, כסלו, etc.)
 - Full leap year support (אדר א׳ and אדר ב׳)
+- Hallel indicator: shows **הלל** (full) or **חצי הלל** (half) below the date on days when Hallel is recited
 
 **Praying Compass**
 - GPS-powered classic two-tone needle pointing to Jerusalem
@@ -41,6 +42,13 @@ A Garmin Connect IQ application that displays the Hebrew calendar date in Hebrew
 ```
       שני         ← day of week        [compass]
     י״ב סיוון     ← Hebrew date
+```
+
+**Days with Hallel (e.g. Rosh Chodesh):**
+```
+      שני                              [compass]
+    א׳ סיוון
+    חצי הלל      ← Hallel indicator
 ```
 
 **Fridays:**
@@ -167,6 +175,7 @@ Gauss-based algorithm with:
 - [x] Travel-safe: recalculates times after fresh GPS fix
 - [ ] Widget version
 - [ ] Hebrew year display
+- [x] Hallel indicator (הלל / חצי הלל)
 - [ ] Jewish holidays
 - [ ] More Garmin devices
 

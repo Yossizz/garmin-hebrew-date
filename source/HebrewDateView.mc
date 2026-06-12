@@ -33,6 +33,7 @@ class HebrewDateView extends WatchUi.View {
     hidden var mShabbatEndTime;       // Time.Moment for Shabbat end
     hidden var mIsFriday;             // Boolean: is today Friday?
     hidden var mUsingCachedGps;       // true = times calculated from cached location, not fresh fix
+    hidden var mHallelText;           // "הלל" / "חצי הלל" / null
     
     // Test mode - set to true to always show Shabbat times (for testing)
     const TEST_MODE = false;
@@ -56,6 +57,7 @@ class HebrewDateView extends WatchUi.View {
         mShabbatEndTime = null;
         mIsFriday = false;
         mUsingCachedGps = false;
+        mHallelText = null;
     }
     
     function updateDate() {
@@ -120,7 +122,18 @@ class HebrewDateView extends WatchUi.View {
             
             // Format date
             mHebrewDateString = hebrewDayText + " " + monthNames[monthIndex];
-            
+
+            // Hallel indicator
+            var isLeap = HebrewCalendar.isHebrewLeapYear(hebrewDate["year"]);
+            var hallelType = Compass.getHallelType(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
+            if (hallelType == 1) {
+                mHallelText = "הלל";
+            } else if (hallelType == 2) {
+                mHallelText = "חצי הלל";
+            } else {
+                mHallelText = null;
+            }
+
             // Check if today is Friday and calculate Shabbat times if GPS available
             // Use actualDayOfWeek which accounts for TEST_MODE adjustment
             var shouldCalculateShabbat = (actualDayOfWeek == 6) && mGpsAvailable && mCurrentLat != null && mCurrentLon != null;
@@ -366,8 +379,9 @@ class HebrewDateView extends WatchUi.View {
         // Keep date text clear of the compass circle (top-right, radius 20 at x=width-25)
         var circleLeft = width - 57;  // left edge of enlarged circle (width-30-27)
         var textX = circleLeft / 2;
+        var hasHallel = (mHallelText != null);
         var dayY = mIsFriday ? (height / 2 - 35) : (height / 2 - 25);
-        var dateY = mIsFriday ? (height / 2 - 10) : (height / 2 + 10);
+        var dateY = mIsFriday ? (height / 2 - 10) : (height / 2 + (hasHallel ? 0 : 10));
 
         // Draw day of week (top line)
         dc.drawText(
@@ -386,7 +400,18 @@ class HebrewDateView extends WatchUi.View {
             mHebrewDateString,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
         );
-        
+
+        // Draw Hallel indicator below date (when applicable)
+        if (hasHallel) {
+            dc.drawText(
+                textX,
+                dateY + 20,
+                Graphics.FONT_SMALL,
+                mHallelText,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+            );
+        }
+
         // Draw Shabbat times if Friday and times are available
         System.println("DISPLAY: mIsFriday=" + mIsFriday + " start=" + mShabbatStartTime + " end=" + mShabbatEndTime);
         if (mIsFriday && mShabbatStartTime != null && mShabbatEndTime != null) {
