@@ -226,7 +226,10 @@ class HebrewDateView extends WatchUi.View {
         if (lastInfo != null && lastInfo.position != null &&
             lastInfo.accuracy != Position.QUALITY_NOT_AVAILABLE) {
             var coords = lastInfo.position.toDegrees();
-            if (coords != null && coords.size() >= 2) {
+            if (coords != null && coords.size() >= 2 &&
+                coords[0] >= -90.0 && coords[0] <= 90.0 &&
+                coords[1] >= -180.0 && coords[1] <= 180.0 &&
+                !(coords[0] == 0.0 && coords[1] == 0.0)) {
                 mCurrentLat = coords[0];
                 mCurrentLon = coords[1];
                 mGpsQuality = Compass.getGpsQuality(lastInfo.accuracy);
@@ -264,7 +267,10 @@ class HebrewDateView extends WatchUi.View {
         // Check if we have position data
         if (info.position != null) {
             var coords = info.position.toDegrees();
-            if (coords != null && coords.size() >= 2) {
+            if (coords != null && coords.size() >= 2 &&
+                coords[0] >= -90.0 && coords[0] <= 90.0 &&
+                coords[1] >= -180.0 && coords[1] <= 180.0 &&
+                !(coords[0] == 0.0 && coords[1] == 0.0)) {
                 mCurrentLat = coords[0];
                 mCurrentLon = coords[1];
                 
