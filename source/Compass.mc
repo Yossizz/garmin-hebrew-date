@@ -2,12 +2,14 @@ using Toybox.Position;
 using Toybox.Sensor;
 using Toybox.Math;
 using Toybox.System;
+using Toybox.Time;
 
 module Compass {
     
     // Jerusalem coordinates (Temple Mount / Old City)
     const JERUSALEM_LAT = 31.7781;
     const JERUSALEM_LON = 35.2360;
+    const JERUSALEM_RADIUS_KM = 10.0;  // 10km radius to consider location as Jerusalem
     
     // Get current GPS location with quality information
     // Returns: {lat, lon, accuracy, quality} or null if unavailable
@@ -173,5 +175,131 @@ module Compass {
         angle = (angle.toNumber() + 360) % 360;
         
         return angle.toDouble();
+    }
+    
+    // Calculate distance between two points using Haversine formula
+    // Returns: distance in kilometers
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        var R = 6371.0; // Earth radius in kilometers
+        
+        var lat1Rad = Math.toRadians(lat1);
+        var lat2Rad = Math.toRadians(lat2);
+        var dLat = Math.toRadians(lat2 - lat1);
+        var dLon = Math.toRadians(lon2 - lon1);
+        
+        var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1Rad) * Math.cos(lat2Rad) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        
+        return R * c;
+    }
+    
+    // Check if location is within Jerusalem
+    // Returns: true if within JERUSALEM_RADIUS_KM of Jerusalem center
+    function isInJerusalem(lat, lon) {
+        if (lat == null || lon == null) {
+            return false;
+        }
+        
+        var distance = calculateDistance(lat, lon, JERUSALEM_LAT, JERUSALEM_LON);
+        return distance < JERUSALEM_RADIUS_KM;
+    }
+    
+    // Calculate sunset time for given date and location
+    // Returns: Time.Moment for sunset, or null if calculation fails
+    // Float modulo: Monkey C % only works on integers
+    function fmod(a, b) {
+        return a - (b * (a / b).toNumber().toFloat());
+    }
+
+    // Generic sun event calculator — horizon_deg controls which event:
+    //   -0.833 = visible sunset (refraction + solar disk)
+    //   -8.5   = nightfall / tzet hakochavim
+    function calculateSunEvent(lat, lon, year, month, day, horizon_deg) {
+        try {
+            System.println("SUNSET: lat=" + lat + " lon=" + lon + " " + year + "-" + month + "-" + day);
+
+            // Days since J2000.0 as integer (avoids large float precision loss)
+            var a = (14 - month) / 12;
+            var y = year + 4800 - a;
+            var m = month + 12 * a - 3;
+            var jdn = day + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045;
+            var n = (jdn - 2451545).toDouble(); // ~9652 for 2026 — small enough for float32
+
+            System.println("SUNSET: n=" + n);
+
+            var J_star = n - (lon / 360.0);
+
+            var M = fmod(357.5291 + 0.98560028 * J_star, 360.0);
+            var M_rad = Math.toRadians(M);
+
+            var C = 1.9148 * Math.sin(M_rad) + 0.02 * Math.sin(2.0 * M_rad) + 0.0003 * Math.sin(3.0 * M_rad);
+
+            var lambda = fmod(M + C + 180.0 + 102.9372, 360.0);
+            var lambda_rad = Math.toRadians(lambda);
+
+            var J_transit_offset = J_star + 0.0053 * Math.sin(M_rad) - 0.0069 * Math.sin(2.0 * lambda_rad);
+
+            var sin_delta = Math.sin(lambda_rad) * Math.sin(Math.toRadians(23.44));
+            var cos_delta = Math.cos(Math.asin(sin_delta));
+
+            var lat_rad = Math.toRadians(lat);
+            var cos_omega = (Math.sin(Math.toRadians(horizon_deg)) - Math.sin(lat_rad) * sin_delta) /
+                            (Math.cos(lat_rad) * cos_delta);
+
+            System.println("SUNSET: cos_omega=" + cos_omega);
+
+            if (cos_omega > 1.0 || cos_omega < -1.0) {
+                System.println("SUNSET: No sunset (polar region)");
+                return null;
+            }
+
+            var omega = Math.toDegrees(Math.acos(cos_omega));
+
+            var J_set_offset = J_transit_offset + (omega / 360.0);
+
+            // J2000.0 = Jan 1, 2000 12:00:00 UTC = Unix 946728000
+            var unix_time = 946728000 + (J_set_offset * 86400.0).toLong();
+
+            System.println("SUNSET: unix_time=" + unix_time);
+
+            var moment = new Time.Moment(unix_time);
+            System.println("SUNSET: Created moment=" + moment);
+            return moment;
+
+        } catch (ex) {
+            System.println("SUNSET: Exception=" + ex);
+            return null;
+        }
+    }
+    
+    // Sunset wrapper (visible horizon, refraction corrected)
+    function calculateSunset(lat, lon, year, month, day) {
+        return calculateSunEvent(lat, lon, year, month, day, -0.833);
+    }
+
+    // Nightfall wrapper (tzet hakochavim: sun at -8.5° below horizon, ~42 min after sunset)
+    function calculateNightfall(lat, lon, year, month, day) {
+        return calculateSunEvent(lat, lon, year, month, day, -8.5);
+    }
+
+    // Candle lighting: Friday sunset - 35 min (Jerusalem) or - 18 min elsewhere
+    function calculateShabbatStart(lat, lon, year, month, day) {
+        var sunset = calculateSunset(lat, lon, year, month, day);
+        if (sunset == null) {
+            return null;
+        }
+        var offsetMinutes = isInJerusalem(lat, lon) ? 35 : 18;
+        return sunset.subtract(new Time.Duration(offsetMinutes * 60));
+    }
+
+    // Havdalah: Saturday sunset + 40 min (Israeli standard / Gra opinion)
+    function calculateShabbatEnd(lat, lon, year, month, day) {
+        var sunset = calculateSunset(lat, lon, year, month, day + 1);
+        if (sunset == null) {
+            return null;
+        }
+        return sunset.add(new Time.Duration(40 * 60));
     }
 }
