@@ -164,7 +164,7 @@ module HebrewCalendar {
         
         var result = "";
         
-        if (day <= 10) {
+        if (day < 10) {
             result = ones[day];
         } else if (day == 15 || day == 16) {
             // Special cases: 15=ט״ו (9+6), 16=ט״ז (9+7)
