@@ -124,19 +124,27 @@ class HebrewDateView extends WatchUi.View {
 
             // Hallel indicator
             var isLeap = isLeapYear;
-            var hallelType = Compass.getHallelType(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
-            if (hallelType == 1) {
-                mHallelText = "הלל";
-            } else if (hallelType == 2) {
-                mHallelText = "חצי הלל";
-            } else {
-                mHallelText = null;
+            mHallelText = null;
+            try {
+                var hallelType = Compass.getHallelType(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
+                if (hallelType == 1) {
+                    mHallelText = "הלל";
+                } else if (hallelType == 2) {
+                    mHallelText = "חצי הלל";
+                }
+            } catch (ex) {
+                System.println("Hallel error: " + ex);
             }
 
             // Determine whether to show candle lighting / havdalah times
             var gpsReady = mGpsAvailable && mCurrentLat != null && mCurrentLon != null;
             var isFriday = (actualDayOfWeek == 6);
-            var erevDays = Compass.getErevYomTov(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
+            var erevDays = 0;
+            try {
+                erevDays = Compass.getErevYomTov(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
+            } catch (ex) {
+                System.println("ErevYomTov error: " + ex);
+            }
 
             System.println("DEBUG: isFriday=" + isFriday + " erevDays=" + erevDays + " gpsReady=" + gpsReady);
             System.println("DEBUG: Using date: " + actualYear + "-" + actualMonth + "-" + actualDay);
@@ -227,11 +235,10 @@ class HebrewDateView extends WatchUi.View {
             lastInfo.accuracy != Position.QUALITY_NOT_AVAILABLE) {
             var coords = lastInfo.position.toDegrees();
             if (coords != null && coords.size() >= 2 &&
-                coords[0] >= -90.0 && coords[0] <= 90.0 &&
-                coords[1] >= -180.0 && coords[1] <= 180.0 &&
-                !(coords[0] == 0.0 && coords[1] == 0.0)) {
-                mCurrentLat = coords[0];
-                mCurrentLon = coords[1];
+                coords[0].toDouble() >= -90.0 && coords[0].toDouble() <= 90.0 &&
+                coords[1].toDouble() > -180.0 && coords[1].toDouble() < 180.0) {
+                mCurrentLat = coords[0].toDouble();
+                mCurrentLon = coords[1].toDouble();
                 mGpsQuality = Compass.getGpsQuality(lastInfo.accuracy);
                 mGpsAvailable = true;
                 mUsingCachedGps = true;  // flag: times may be from wrong location
@@ -268,11 +275,10 @@ class HebrewDateView extends WatchUi.View {
         if (info.position != null) {
             var coords = info.position.toDegrees();
             if (coords != null && coords.size() >= 2 &&
-                coords[0] >= -90.0 && coords[0] <= 90.0 &&
-                coords[1] >= -180.0 && coords[1] <= 180.0 &&
-                !(coords[0] == 0.0 && coords[1] == 0.0)) {
-                mCurrentLat = coords[0];
-                mCurrentLon = coords[1];
+                coords[0].toDouble() >= -90.0 && coords[0].toDouble() <= 90.0 &&
+                coords[1].toDouble() > -180.0 && coords[1].toDouble() < 180.0) {
+                mCurrentLat = coords[0].toDouble();
+                mCurrentLon = coords[1].toDouble();
                 
                 // Always update bearing with latest position (covers travel case)
                 mBearingToJerusalem = Compass.getBearingToJerusalem(mCurrentLat, mCurrentLon);

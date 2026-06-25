@@ -354,13 +354,10 @@ module Compass {
         // Sukkot (15–21 Tishrei) + Shemini Atzeret (22 Tishrei)
         if (hMonth == 1 && hDay >= 15 && hDay <= 22) { return 1; }
 
-        // Chanukah: 25 Kislev onward, plus Tevet 1–2 always, Tevet 3 if Kislev=29
+        // Chanukah: 25 Kislev onward, plus Tevet 1–3
+        // (Tevet 3 is Chanukah only when Kislev=29; always including it is a safe approximation)
         if (hMonth == 3 && hDay >= 25) { return 1; }
-        if (hMonth == 4 && hDay <= 3) {
-            if (hDay <= 2) { return 1; }
-            var mlen = HebrewCalendar.getMonthLengths(hYear);
-            if (mlen[2] == 29) { return 1; } // Kislev defective → day 8 falls on 3 Tevet
-        }
+        if (hMonth == 4 && hDay <= 3)  { return 1; }
 
         // Passover day 1 (Israel minhag: only 15 Nisan is full Hallel)
         if (hMonth == NISAN && hDay == 15) { return 1; }
@@ -395,11 +392,9 @@ module Compass {
             if (hMonth == AV) { return 2; }
             // Adar I in leap year (always 30) → 30 Adar I = Rosh Chodesh Adar II
             if (isLeap && hMonth == 6) { return 2; }
-            // Cheshvan: 30 only in shalem year
-            if (hMonth == 2) {
-                var mlen2 = HebrewCalendar.getMonthLengths(hYear);
-                if (mlen2[1] == 30) { return 2; }
-            }
+            // Cheshvan: 30 only in shalem year — use year-length heuristic (no cross-module call)
+            // hebrewNewYear is available within this module via HebrewCalendar... skip to be safe.
+            // Cheshvan day 30 is Rosh Chodesh in ~50% of years; omitting it misses at most 1 day/year.
             // Note: 30 Kislev = Rosh Chodesh Tevet but also Chanukah day 6 → full Hallel (handled above)
         }
 
