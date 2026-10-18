@@ -1,0 +1,31 @@
+Title: Hebrew Date (תאריך עברי)
+
+Category: Widgets
+
+Short description:
+Today's Hebrew date in Hebrew, with holidays, parasha, Omer, Shabbat times and a compass to Jerusalem.
+
+Description (English):
+Hebrew Date shows today's Jewish date in Hebrew letters, for example ז׳ חשוון תשפ״ז, as a glance and a full widget.
+
+- The date changes at local sunset, using your last GPS position (can be switched off in settings).
+- Holidays and fasts, including postponed fasts, Rosh Chodesh, Chanukah, Purim Katan and the Israeli national days.
+- The weekly parasha, including double parshiyot, with Israel or Diaspora schedule.
+- Sefirat HaOmer count and Hallel (full or half).
+- Candle lighting and havdalah on Fridays, Shabbat and Erev Yom Tov (18 minutes before sunset, 35 in Jerusalem; havdalah sunset + 40).
+- A compass needle pointing to Jerusalem in the sub-screen.
+
+Settings: Israel or Diaspora calendar; start the new date at sunset.
+Designed for the Descent G1 / G1 Solar.
+
+תיאור (עברית):
+התאריך העברי של היום באותיות עבריות, לדוגמה ז׳ חשוון תשפ״ז, כ-Glance וכווידג׳ט מלא.
+
+- התאריך מתחלף בשקיעה לפי מיקום ה-GPS האחרון (ניתן לכבות בהגדרות).
+- חגים וצומות (כולל צומות נדחים), ראש חודש, חנוכה, פורים קטן וימי הזיכרון והעצמאות.
+- פרשת השבוע, כולל פרשות מחוברות, לפי לוח ארץ ישראל או חו״ל.
+- ספירת העומר והלל (שלם או חצי).
+- זמני כניסה ויציאה בערב שבת, בשבת ובערב חג (18 דקות לפני השקיעה, 35 בירושלים; יציאה: שקיעה + 40 דקות).
+- מצפן המצביע לירושלים בחלון העגול.
+
+What's new (1.0.0): First store release.

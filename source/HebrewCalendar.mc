@@ -44,9 +44,21 @@ module HebrewCalendar {
         return 0;
     }
 
+    // Small memo: month lengths, toJdn and fromJdn all lean on newYear(), and the
+    // glance has a tight watchdog budget.
+    var mNewYears = {};
+
     // JDN of 1 Tishrei of year y.
     function newYear(y) {
-        return EPOCH_JDN + elapsedDays(y) + newYearDelay(y);
+        var v = mNewYears.get(y);
+        if (v == null) {
+            v = EPOCH_JDN + elapsedDays(y) + newYearDelay(y);
+            if (mNewYears.size() >= 8) {
+                mNewYears = {};
+            }
+            mNewYears.put(y, v);
+        }
+        return v;
     }
 
     function yearLength(y) {

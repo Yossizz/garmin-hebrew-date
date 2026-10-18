@@ -33,7 +33,10 @@ class HebrewDateView extends WatchUi.View {
 
     function initialize() {
         View.initialize();
-        var saved = Today.savedLocation();
+        var saved = Demo.location();
+        if (saved == null) {
+            saved = Today.savedLocation();
+        }
         if (saved != null) {
             mCurrentLat = saved[0];
             mCurrentLon = saved[1];
@@ -49,7 +52,7 @@ class HebrewDateView extends WatchUi.View {
     // Recompute the Hebrew date and the Shabbat / Yom Tov times.
     function refresh() {
         var loc = (mCurrentLat == null) ? null : [mCurrentLat, mCurrentLon];
-        mToday = Today.compute(Time.now(), loc);
+        mToday = Today.compute(Demo.now(), loc);
         mStartTime = null;
         mEndTime = null;
         if (loc == null) {
@@ -94,6 +97,13 @@ class HebrewDateView extends WatchUi.View {
     }
 
     function onShow() {
+        if (Demo.location() != null) {
+            setLocation(Demo.location()[0], Demo.location()[1], false);
+            mGpsQuality = 100;
+            enableCompass();
+            refresh();
+            return;
+        }
         mGpsQuality = 0;
         mPreviousGpsQuality = 0;
 
@@ -201,8 +211,8 @@ class HebrewDateView extends WatchUi.View {
 
     function onUpdate(dc) {
         // The Hebrew date can change at sunset or midnight while the widget is open.
-        if (mToday == null || HebrewCalendar.civilJdn(Time.now()) != mToday["civil"] ||
-            (mToday["sunset"] != null && !mToday["after"] && Time.now().value() >= mToday["sunset"].value())) {
+        if (mToday == null || HebrewCalendar.civilJdn(Demo.now()) != mToday["civil"] ||
+            (mToday["sunset"] != null && !mToday["after"] && Demo.now().value() >= mToday["sunset"].value())) {
             refresh();
         }
 
@@ -309,9 +319,9 @@ class HebrewDateView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawCircle(centerX, centerY, radius);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, centerY - 5, Graphics.FONT_XTINY, "GPS",
+        dc.drawText(centerX, centerY - 8, Graphics.FONT_XTINY, "GPS",
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(centerX, centerY + 5, Graphics.FONT_XTINY, mGpsQuality + "%",
+        dc.drawText(centerX, centerY + 9, Graphics.FONT_XTINY, mGpsQuality + "%",
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         if (mGpsQuality > 0) {
             dc.setPenWidth(6);

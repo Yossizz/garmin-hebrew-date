@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# ./build.sh [build|sim|test|release|iq]   (DEVICE=descentg1 by default)
+# ./build.sh [build|sim|demo|test|release|iq]   (DEVICE=descentg1 by default)
 #   build    debug .prg            sim      debug .prg + run in the simulator
+#   demo     simulator run pretending it is Friday 15:00 in Tel Aviv
 #   test     run the unit tests    release  release .prg (sideload)
 #   iq       release .iq package for the Connect IQ Store
 set -euo pipefail
@@ -30,10 +31,13 @@ case "${1:-build}" in
     sim)     mc -d "$DEVICE" -o "bin/HebrewDate-$DEVICE.prg"
              pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
              "$SDK/bin/monkeydo" "bin/HebrewDate-$DEVICE.prg" "$DEVICE" ;;
+    demo)    "$SDK/bin/monkeyc" -f "monkey.jungle;demo.jungle" -y "$KEY" -w -d "$DEVICE" -o "bin/HebrewDate-demo.prg"
+             pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
+             "$SDK/bin/monkeydo" bin/HebrewDate-demo.prg "$DEVICE" ;;
     test)    mc -d "$DEVICE" -o "bin/HebrewDate-test.prg" --unit-test
              pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
              "$SDK/bin/monkeydo" bin/HebrewDate-test.prg "$DEVICE" -t ;;
     release) mc -d "$DEVICE" -o "bin/HebrewDate.prg" -r ;;
     iq)      mc -e -o bin/HebrewDate.iq -r ;;
-    *)       echo "usage: $0 [build|sim|test|release|iq]" >&2; exit 2 ;;
+    *)       echo "usage: $0 [build|sim|demo|test|release|iq]" >&2; exit 2 ;;
 esac

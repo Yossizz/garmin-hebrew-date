@@ -39,13 +39,14 @@ module Parasha {
         var tishaBav = HebrewCalendar.toJdn(y, 5, 9);
         var nextRhDow = HebrewCalendar.dayOfWeek(HebrewCalendar.newYear(y + 1));
         var end = HebrewCalendar.newYear(y + 1);
+        var pesach = HebrewCalendar.toJdn(y, 1, 15);
+        var shavuot = HebrewCalendar.toJdn(y, 3, 6);
 
         // Reading order: Vayelech, Haazinu, then Bereshit ... Vayelech.
         var pos = (HebrewCalendar.dayOfWeek(rh) > 3) ? 1 : 0;
         var table = [];
         for (var s = first; s < end; s += 7) {
-            var hd = HebrewCalendar.fromJdn(s);
-            if (parashaless(hd[1], hd[2], israel) || pos > 53) {
+            if (parashaless(s - rh, s - pesach, s - shavuot, israel) || pos > 53) {
                 table.add(null);
                 continue;
             }
@@ -79,17 +80,17 @@ module Parasha {
         return (x >= 0) ? x / 7 : -((-x + 6) / 7);
     }
 
-    // Shabbatot that are festivals (or Chol HaMoed) have no weekly parasha.
-    function parashaless(m, d, israel) {
-        if (israel && ((m == 7 && d == 23) || (m == 1 && d == 22) || (m == 3 && d == 7))) {
-            return false;
-        }
-        if (m == 7 && (d == 1 || d == 2 || d == 10 || (d >= 15 && d <= 23))) {
+    // Shabbatot that are festivals (or Chol HaMoed) have no weekly parasha. Arguments are
+    // day offsets from 1 Tishrei, 15 Nisan and 6 Sivan: Rosh Hashana (0, 1), Yom Kippur (9),
+    // Sukkot-Simchat Torah (14-22), Pesach (0-7) and Shavuot (0, 1); the last day of each
+    // is a weekday in Israel.
+    function parashaless(fromRh, fromPesach, fromShavuot, israel) {
+        if (fromRh == 0 || fromRh == 1 || fromRh == 9 || (fromRh >= 14 && fromRh <= (israel ? 21 : 22))) {
             return true;
         }
-        if (m == 1 && d >= 15 && d <= 22) {
+        if (fromPesach >= 0 && fromPesach <= (israel ? 6 : 7)) {
             return true;
         }
-        return m == 3 && (d == 6 || d == 7);
+        return fromShavuot == 0 || (fromShavuot == 1 && !israel);
     }
 }

@@ -14,7 +14,8 @@ class HebrewDateGlanceView extends WatchUi.GlanceView {
     }
 
     function onUpdate(dc) {
-        var t = Today.compute(Time.now(), Today.savedLocation());
+        var loc = Demo.location();
+        var t = Today.compute(Demo.now(), (loc != null) ? loc : Today.savedLocation());
         var lines = Today.infoLines(t);
         var h = dc.getHeight();
         // The G1 glance strip is clipped short of the sub-screen bubble, so right-align
@@ -25,13 +26,21 @@ class HebrewDateGlanceView extends WatchUi.GlanceView {
         dc.drawText(x, h * 0.18, Graphics.FONT_XTINY, Today.dayLabel(t), j);
         dc.drawText(x, h * 0.48, Graphics.FONT_XTINY, HebrewText.date(t["y"], t["m"], t["d"]), j);
         if (lines.size() > 0) {
-            dc.drawText(x, h * 0.80, Graphics.FONT_XTINY, lines[0], j);
+            dc.drawText(x, h * 0.80, Graphics.FONT_XTINY, fit(dc, lines[0], x), j);
         }
+    }
+
+    // "פרשת לך לך" -> "לך לך" when the line is wider than the strip.
+    function fit(dc, s, maxW) {
+        if (dc.getTextWidthInPixels(s, Graphics.FONT_XTINY) > maxW && s.find("פרשת ") == 0) {
+            return s.substring(5, s.length());
+        }
+        return s;
     }
 
     function glanceRight(dc) {
         if (WatchUi has :getSubscreen && WatchUi.getSubscreen() != null) {
-            return 88;
+            return 92;
         }
         return dc.getWidth() - 2;
     }
