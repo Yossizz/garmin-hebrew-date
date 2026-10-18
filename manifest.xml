@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
-    <iq:application id="a9e7b5c3d1f2a4b6c8e0d2f4a6b8c0e2" type="widget" name="@Strings.AppName" entry="HebrewDateFieldApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.3.0">
+    <iq:application id="9b7d02e998084c7294df4bb319e13ca9" type="widget" name="@Strings.AppName" entry="HebrewDateFieldApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.3.0">
         <iq:products>
             <iq:product id="descentg1"/>
         </iq:products>
