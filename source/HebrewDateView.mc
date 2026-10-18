@@ -7,6 +7,7 @@ using Toybox.Position;
 using Toybox.Sensor;
 using Toybox.System;
 using Toybox.Time;
+using Toybox.Timer;
 using Toybox.WatchUi;
 
 // Widget view. Page 0: day, year, date, observances and (Fri / Shabbat / Erev Yom Tov)
@@ -29,6 +30,7 @@ class HebrewDateView extends WatchUi.View {
     hidden var mCompassHeading = null;
     hidden var mArrowAngle = null;
     hidden var mSensorListenerActive = false;
+    hidden var mCompassTimer = null;
     hidden var mUsingCachedGps = false;
 
     function initialize() {
@@ -139,6 +141,8 @@ class HebrewDateView extends WatchUi.View {
         Storage.setValue("loc", [lat, lon]);
     }
 
+    // Sensor events arrive only about once a second (and in a widget sometimes less),
+    // so also poll the heading 4x a second while the widget is on screen.
     function enableCompass() {
         if (!mSensorListenerActive) {
             try {
@@ -147,6 +151,17 @@ class HebrewDateView extends WatchUi.View {
             } catch (ex) {
                 mSensorListenerActive = false;
             }
+        }
+        if (mCompassTimer == null) {
+            mCompassTimer = new Timer.Timer();
+            mCompassTimer.start(method(:pollHeading), 250, true);
+        }
+    }
+
+    function pollHeading() as Void {
+        var info = Sensor.getInfo();
+        if (info != null) {
+            onSensor(info);
         }
     }
 
@@ -190,7 +205,15 @@ class HebrewDateView extends WatchUi.View {
             heading = Math.toDegrees(Math.atan2(sensorInfo.magY, sensorInfo.magX));
         }
         if (heading != null) {
-            mCompassHeading = ((heading.toNumber() + 360) % 360).toDouble();
+            var h = ((heading.toNumber() + 360) % 360).toDouble();
+            // Redraw only when the needle actually moves (>= 2 degrees)
+            if (mCompassHeading != null) {
+                var diff = (h - mCompassHeading).abs();
+                if (diff < 2.0 || diff > 358.0) {
+                    return;
+                }
+            }
+            mCompassHeading = h;
             if (mGpsAvailable && mBearingToJerusalem != null) {
                 mArrowAngle = Compass.calculateArrowAngle(mBearingToJerusalem, mCompassHeading);
             }
@@ -361,6 +384,10 @@ class HebrewDateView extends WatchUi.View {
 
     function onHide() {
         Position.enableLocationEvents(Position.LOCATION_DISABLE, method(:onPosition));
+        if (mCompassTimer != null) {
+            mCompassTimer.stop();
+            mCompassTimer = null;
+        }
         if (mSensorListenerActive) {
             try {
                 Sensor.enableSensorEvents(null);
