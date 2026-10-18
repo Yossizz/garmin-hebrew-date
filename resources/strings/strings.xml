@@ -1,0 +1,5 @@
+<strings>
+    <string id="AppName">Hebrew Date</string>
+    <string id="IsraelTitle">Israel calendar (one-day Yom Tov, Israeli parasha schedule)</string>
+    <string id="SunsetSwitchTitle">Start the new Hebrew date at sunset</string>
+</strings>

@@ -1,0 +1,4 @@
+<properties>
+    <property id="Israel" type="boolean">true</property>
+    <property id="SunsetSwitch" type="boolean">true</property>
+</properties>

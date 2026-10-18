@@ -1,601 +1,377 @@
-using Toybox.WatchUi;
+using Toybox.Application.Storage;
+using Toybox.Attention;
 using Toybox.Graphics;
-using Toybox.System;
-using Toybox.Time;
-using Toybox.Time.Gregorian;
 using Toybox.Lang;
-using Toybox.Timer;
 using Toybox.Math;
 using Toybox.Position;
-using Toybox.Attention;
 using Toybox.Sensor;
+using Toybox.System;
+using Toybox.Time;
+using Toybox.WatchUi;
 
+// Widget view. Page 0: day, year, date, observances and (Fri / Shabbat / Erev Yom Tov)
+// candle lighting + havdalah. Page 1: sunset and every observance line.
+// The compass to Jerusalem is drawn in the round sub-screen on both pages.
 class HebrewDateView extends WatchUi.View {
 
-    hidden var mHebrewDateString;
-    hidden var mDayName;
-    hidden var mLastDay;
-    
-    // GPS and compass variables
-    hidden var mCurrentLat;           // Stored GPS latitude (set once at startup)
-    hidden var mCurrentLon;           // Stored GPS longitude (set once at startup)
-    hidden var mBearingToJerusalem;   // Bearing from stored location to Jerusalem (0-360)
-    hidden var mGpsAvailable;         // Boolean: GPS signal status (checked at startup)
-    hidden var mGpsQuality;           // GPS quality percentage (0-100)
-    hidden var mPreviousGpsQuality;   // Previous GPS quality to detect lock transition
-    hidden var mCompassHeading;       // Current compass heading from watch (0-360)
-    hidden var mArrowAngle;           // Calculated arrow angle for drawing
-    hidden var mGpsInitialized;      // Flag to track if we've tried to get GPS once
-    hidden var mSensorListenerActive; // Track if sensor listener is active
-    
-    // Shabbat times variables
-    hidden var mShabbatStartTime;     // Time.Moment for Shabbat start
-    hidden var mShabbatEndTime;       // Time.Moment for Shabbat end
-    hidden var mIsFriday;             // Boolean: is today Friday?
-    hidden var mIsErevYomTov;         // Boolean: is today Erev Yom Tov?
-    hidden var mUsingCachedGps;       // true = times calculated from cached location, not fresh fix
-    hidden var mHallelText;           // "הלל" / "חצי הלל" / null
-    
-    // Test mode - set to true to always show Shabbat times (for testing)
-    const TEST_MODE = false;
+    hidden var mPage = 0;
+    hidden var mToday = null;
+    hidden var mStartTime = null;     // candle lighting (Time.Moment)
+    hidden var mEndTime = null;       // havdalah / end of Yom Tov (Time.Moment)
+
+    // GPS and compass
+    hidden var mCurrentLat = null;
+    hidden var mCurrentLon = null;
+    hidden var mBearingToJerusalem = null;
+    hidden var mGpsAvailable = false;
+    hidden var mGpsQuality = 0;
+    hidden var mPreviousGpsQuality = 0;
+    hidden var mCompassHeading = null;
+    hidden var mArrowAngle = null;
+    hidden var mSensorListenerActive = false;
+    hidden var mUsingCachedGps = false;
 
     function initialize() {
         View.initialize();
-        mHebrewDateString = "";
-        mDayName = "";
-        mLastDay = -1;
-        mCurrentLat = null;
-        mCurrentLon = null;
-        mBearingToJerusalem = null;
-        mGpsAvailable = false;
-        mGpsQuality = 0;
-        mPreviousGpsQuality = 0;
-        mCompassHeading = null;
-        mArrowAngle = null;
-        mGpsInitialized = false;
-        mSensorListenerActive = false;
-        mShabbatStartTime = null;
-        mShabbatEndTime = null;
-        mIsFriday = false;
-        mIsErevYomTov = false;
-        mUsingCachedGps = false;
-        mHallelText = null;
+        var saved = Today.savedLocation();
+        if (saved != null) {
+            mCurrentLat = saved[0];
+            mCurrentLon = saved[1];
+            mUsingCachedGps = true;
+        }
     }
-    
-    function updateDate() {
-        // Get current date
-        var now = Time.now();
-        var today = Gregorian.info(now, Time.FORMAT_SHORT);
-        
-        // In TEST_MODE, always pretend it's Friday for testing
-        var actualDay = today.day;
-        var actualMonth = today.month;
-        var actualYear = today.year;
-        var actualDayOfWeek = today.day_of_week;
-        
-        if (TEST_MODE) {
-            // Simulate 5 Sivan 5786 = Erev Shavuot (May 21, 2026, Thursday)
-            actualDay = 21;
-            actualMonth = 5;
-            actualYear = 2026;
-            actualDayOfWeek = 5; // Thursday
-        }
-        
-        // Only recalculate if day has changed
-        if (actualDay != mLastDay) {
-            mLastDay = actualDay;
-            
-            // Convert to Hebrew date (use actual adjusted date in TEST_MODE)
-            var hebrewDate = HebrewCalendar.gregorianToHebrew(
-                actualYear,
-                actualMonth,
-                actualDay
-            );
-            
-            // Hebrew month names in actual Hebrew
-            var monthNames = ["תשרי", "חשוון", "כסלו", "טבת", "שבט", 
-                            "אדר", "אדר ב", "ניסן", "אייר", "סיון", 
-                            "תמוז", "אב", "אלול"];
-            
-            // Hebrew day names (Sunday = 1)
-            var dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-            
-            // In a non-leap year months 7+ (Nisan onward) must skip the "אדר ב" slot at index 6
-            var monthIndex = hebrewDate["month"] - 1;
-            var isLeapYear = HebrewCalendar.isHebrewLeapYear(hebrewDate["year"]);
-            if (!isLeapYear && hebrewDate["month"] >= 7) {
-                monthIndex = hebrewDate["month"]; // use index = month to skip Adar II slot
-            }
-            if (monthIndex >= monthNames.size()) {
-                monthIndex = monthNames.size() - 1;
-            }
-            
-            // Get day of week (use adjusted day in TEST_MODE)
-            mDayName = dayNames[actualDayOfWeek - 1];
-            
-            // Format Hebrew day with Hebrew numerals
-            var hebrewDay = HebrewCalendar.formatHebrewDay(hebrewDate["day"]);
-            
-            // Convert ASCII-mapped Hebrew back to actual Hebrew
-            var hebrewDayText = HebrewFont.asciiToHebrew(hebrewDay);
-            
-            // Format date
-            mHebrewDateString = hebrewDayText + " " + monthNames[monthIndex];
 
-            // Hallel indicator
-            var isLeap = isLeapYear;
-            mHallelText = null;
-            try {
-                var hallelType = Compass.getHallelType(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
-                if (hallelType == 1) {
-                    mHallelText = "הלל";
-                } else if (hallelType == 2) {
-                    mHallelText = "חצי הלל";
-                }
-            } catch (ex) {
-                System.println("Hallel error: " + ex);
-            }
-
-            // Determine whether to show candle lighting / havdalah times
-            var gpsReady = mGpsAvailable && mCurrentLat != null && mCurrentLon != null;
-            var isFriday = (actualDayOfWeek == 6);
-            var erevDays = 0;
-            try {
-                erevDays = Compass.getErevYomTov(hebrewDate["year"], hebrewDate["month"], hebrewDate["day"], isLeap);
-            } catch (ex) {
-                System.println("ErevYomTov error: " + ex);
-            }
-
-            System.println("DEBUG: isFriday=" + isFriday + " erevDays=" + erevDays + " gpsReady=" + gpsReady);
-            System.println("DEBUG: Using date: " + actualYear + "-" + actualMonth + "-" + actualDay);
-
-            if (gpsReady && (isFriday || erevDays > 0)) {
-                mIsFriday = isFriday;
-                mIsErevYomTov = (erevDays > 0) && !isFriday; // Friday takes priority
-
-                // Candle lighting: same formula for Shabbat and Yom Tov
-                mShabbatStartTime = Compass.calculateShabbatStart(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay);
-
-                // End time: Shabbat = day+1 sunset+40; Yom Tov = day+erevDays sunset+40
-                if (isFriday) {
-                    mShabbatEndTime = Compass.calculateShabbatEnd(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay);
-                } else {
-                    mShabbatEndTime = Compass.calculateYomTovEnd(mCurrentLat, mCurrentLon, actualYear, actualMonth, actualDay, erevDays);
-                }
-
-                System.println("DEBUG: Start=" + mShabbatStartTime + " End=" + mShabbatEndTime);
-            } else {
-                mIsFriday = false;
-                mIsErevYomTov = false;
-                mShabbatStartTime = null;
-                mShabbatEndTime = null;
-            }
-        } else {
-            return; // Day hasn't changed, skip recalculation
-        }
-        
+    function togglePage() {
+        mPage = 1 - mPage;
         WatchUi.requestUpdate();
     }
 
-    function onLayout(dc) {
-        // No layout needed
+    // Recompute the Hebrew date and the Shabbat / Yom Tov times.
+    function refresh() {
+        var loc = (mCurrentLat == null) ? null : [mCurrentLat, mCurrentLon];
+        mToday = Today.compute(Time.now(), loc);
+        mStartTime = null;
+        mEndTime = null;
+        if (loc == null) {
+            return;
+        }
+        var civil = mToday["civil"];
+        var cdow = HebrewCalendar.dayOfWeek(civil);
+        var hd = HebrewCalendar.fromJdn(civil);
+        var erev = Holidays.erevYomTov(hd[1], hd[2], mToday["israel"]);
+        var startJdn = null;
+        var endJdn = null;
+        if (erev > 0) {
+            startJdn = civil;
+            endJdn = civil + erev;
+        }
+        if (cdow == 5) {
+            startJdn = civil;
+            if (endJdn == null || endJdn < civil + 1) {
+                endJdn = civil + 1;
+            }
+        } else if (cdow == 6) {
+            startJdn = civil - 1;
+            if (endJdn == null) {
+                endJdn = civil;
+            }
+        }
+        if (endJdn != null && HebrewCalendar.dayOfWeek(endJdn) == 5) {
+            endJdn++;    // Yom Tov running into Shabbat
+        }
+        if (startJdn != null) {
+            mStartTime = SunTimes.candleLighting(mCurrentLat, mCurrentLon, startJdn);
+            mEndTime = SunTimes.havdalah(mCurrentLat, mCurrentLon, endJdn);
+        }
     }
-    
-    // Format Time.Moment to HH:MM string (24-hour format)
-    function formatTime(timeMoment) {
-        if (timeMoment == null) {
+
+    function formatTime(moment) {
+        if (moment == null) {
             return "--:--";
         }
-        
-        try {
-            var info = Time.Gregorian.info(timeMoment, Time.FORMAT_SHORT);
-            var hour = info.hour.format("%02d");
-            var min = info.min.format("%02d");
-            return hour + ":" + min;
-        } catch (ex) {
-            return "--:--";
-        }
+        var info = Time.Gregorian.info(moment, Time.FORMAT_SHORT);
+        return info.hour.format("%02d") + ":" + info.min.format("%02d");
     }
 
     function onShow() {
-        // In TEST_MODE, simulate GPS lock with Jerusalem coordinates
-        if (TEST_MODE) {
-            mCurrentLat = 31.7781;  // Jerusalem
-            mCurrentLon = 35.2360;
-            mGpsAvailable = true;
-            mGpsQuality = 100;
-            mBearingToJerusalem = Compass.calculateBearing(mCurrentLat, mCurrentLon, Compass.JERUSALEM_LAT, Compass.JERUSALEM_LON);
-            
-            // Enable sensor for compass
-            try {
-                Sensor.enableSensorEvents(method(:onSensor));
-                mSensorListenerActive = true;
-            } catch (ex) {
-                // Sensor not available
-            }
-            
-            // Trigger update to calculate and display Shabbat times
-            updateDate();
-            WatchUi.requestUpdate();
-            return;
-        }
-        
-        // Reset GPS state
-        mGpsAvailable = false;
         mGpsQuality = 0;
         mPreviousGpsQuality = 0;
-        mCurrentLat = null;
-        mCurrentLon = null;
-        mBearingToJerusalem = null;
 
-        // Use last-known position immediately so compass shows without waiting.
-        // GPS continues running in background to get a fresh fix — important when traveling.
+        // Use the last-known position immediately; keep GPS running for a fresh fix
+        // (important when travelling).
         var lastInfo = Position.getInfo();
         if (lastInfo != null && lastInfo.position != null &&
             lastInfo.accuracy != Position.QUALITY_NOT_AVAILABLE) {
             var coords = lastInfo.position.toDegrees();
-            if (coords != null && coords.size() >= 2 &&
-                coords[0].toDouble() >= -90.0 && coords[0].toDouble() <= 90.0 &&
-                coords[1].toDouble() > -180.0 && coords[1].toDouble() < 180.0) {
-                mCurrentLat = coords[0].toDouble();
-                mCurrentLon = coords[1].toDouble();
+            if (validCoords(coords)) {
+                setLocation(coords[0].toDouble(), coords[1].toDouble(), true);
                 mGpsQuality = Compass.getGpsQuality(lastInfo.accuracy);
-                mGpsAvailable = true;
-                mUsingCachedGps = true;  // flag: times may be from wrong location
-                mBearingToJerusalem = Compass.getBearingToJerusalem(mCurrentLat, mCurrentLon);
-                Sensor.enableSensorEvents(method(:onSensor));
-                mSensorListenerActive = true;
-                updateDate();
-                WatchUi.requestUpdate();
-                // Fall through — still start GPS to get a fresh accurate fix
+                enableCompass();
             }
         }
-
-        // Always request a fresh GPS fix. Once quality > LAST_KNOWN the bearing is updated.
-        // onPosition() will stop GPS once a real fix is acquired.
         Position.enableLocationEvents(Position.LOCATION_CONTINUOUS, method(:onPosition));
-        
-        // Request update to start rendering
+        refresh();
         WatchUi.requestUpdate();
     }
-    
-    // GPS location callback - called when GPS data is updated
+
+    function validCoords(coords) {
+        return coords != null && coords.size() >= 2 &&
+            coords[0].toDouble() >= -90.0 && coords[0].toDouble() <= 90.0 &&
+            coords[1].toDouble() > -180.0 && coords[1].toDouble() < 180.0;
+    }
+
+    function setLocation(lat, lon, cached) {
+        mCurrentLat = lat;
+        mCurrentLon = lon;
+        mUsingCachedGps = cached;
+        mGpsAvailable = true;
+        mBearingToJerusalem = Compass.getBearingToJerusalem(lat, lon);
+        Storage.setValue("loc", [lat, lon]);
+    }
+
+    function enableCompass() {
+        if (!mSensorListenerActive) {
+            try {
+                Sensor.enableSensorEvents(method(:onSensor));
+                mSensorListenerActive = true;
+            } catch (ex) {
+                mSensorListenerActive = false;
+            }
+        }
+    }
+
     function onPosition(info as Position.Info) as Void {
         if (info == null) {
             return;
         }
-        
-        // Store previous quality to detect lock transition
         mPreviousGpsQuality = mGpsQuality;
-        
-        // Update GPS quality
         mGpsQuality = Compass.getGpsQuality(info.accuracy);
-        
-        // Check if we have position data
         if (info.position != null) {
             var coords = info.position.toDegrees();
-            if (coords != null && coords.size() >= 2 &&
-                coords[0].toDouble() >= -90.0 && coords[0].toDouble() <= 90.0 &&
-                coords[1].toDouble() > -180.0 && coords[1].toDouble() < 180.0) {
-                mCurrentLat = coords[0].toDouble();
-                mCurrentLon = coords[1].toDouble();
-                
-                // Always update bearing with latest position (covers travel case)
-                mBearingToJerusalem = Compass.getBearingToJerusalem(mCurrentLat, mCurrentLon);
-                mGpsAvailable = true;
-
-                // Only stop GPS and finalise once we have a real fresh fix (not just cached)
-                if (info.accuracy != Position.QUALITY_LAST_KNOWN) {
-                    // Always recalculate Shabbat times with fresh accurate position.
-                    // Covers both: (a) cached location from wrong place, (b) first open with no cache
-                    mUsingCachedGps = false;
-                    mLastDay = -1;  // force updateDate() to recalculate with correct location
-                    updateDate();
-
-                    // Vibrate on first real lock
+            if (validCoords(coords)) {
+                var fresh = info.accuracy != Position.QUALITY_LAST_KNOWN;
+                setLocation(coords[0].toDouble(), coords[1].toDouble(), !fresh);
+                if (fresh) {
+                    refresh();
                     if (mPreviousGpsQuality < 50) {
                         try {
                             Attention.vibrate([new Attention.VibeProfile(100, 100)]);
-                        } catch (ex) {}
-                    }
-
-                    // Stop GPS to save battery — bearing is now accurate
-                    Position.enableLocationEvents(Position.LOCATION_DISABLE, method(:onPosition));
-
-                    // Enable magnetometer
-                    if (!mSensorListenerActive) {
-                        try {
-                            Sensor.enableSensorEvents(method(:onSensor));
-                            mSensorListenerActive = true;
                         } catch (ex) {
-                            mSensorListenerActive = false;
                         }
                     }
+                    // Stop GPS to save battery once we have a real fix
+                    Position.enableLocationEvents(Position.LOCATION_DISABLE, method(:onPosition));
+                    enableCompass();
                 }
             }
         }
-        
-        // Request display update
         WatchUi.requestUpdate();
     }
-    
-    // Sensor event callback - update heading here (event-driven, not polled in onUpdate)
+
     function onSensor(sensorInfo as Sensor.Info) as Void {
-        if (sensorInfo == null) { return; }
-
+        if (sensorInfo == null) {
+            return;
+        }
         var heading = null;
-
-        // Try direct heading field (radians → degrees)
         if (sensorInfo has :heading && sensorInfo.heading != null) {
             heading = Math.toDegrees(sensorInfo.heading);
-        // Fallback: raw magnetometer axes
         } else if ((sensorInfo has :magX) && (sensorInfo has :magY) &&
                    sensorInfo.magX != null && sensorInfo.magY != null) {
             heading = Math.toDegrees(Math.atan2(sensorInfo.magY, sensorInfo.magX));
         }
-
         if (heading != null) {
             mCompassHeading = ((heading.toNumber() + 360) % 360).toDouble();
-
             if (mGpsAvailable && mBearingToJerusalem != null) {
                 mArrowAngle = Compass.calculateArrowAngle(mBearingToJerusalem, mCompassHeading);
             }
-
             WatchUi.requestUpdate();
         }
     }
 
+    // Round sub-screen (Descent G1) or a matching top-right circle elsewhere: [cx, cy, r].
+    function bubble(dc) {
+        if (WatchUi has :getSubscreen) {
+            var sub = WatchUi.getSubscreen();
+            if (sub != null) {
+                return [sub.x + sub.width / 2, sub.y + sub.height / 2, sub.width / 2 - 4];
+            }
+        }
+        return [dc.getWidth() - 30, 30, 27];
+    }
+
     function onUpdate(dc) {
-        // PRIORITY 1: Update date before anything else
-        updateDate();
-        
-        // Clear screen with black background
+        // The Hebrew date can change at sunset or midnight while the widget is open.
+        if (mToday == null || HebrewCalendar.civilJdn(Time.now()) != mToday["civil"] ||
+            (mToday["sunset"] != null && !mToday["after"] && Time.now().value() >= mToday["sunset"].value())) {
+            refresh();
+        }
+
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.clear();
-        
-        // Get screen dimensions
-        var width = dc.getWidth();
-        var height = dc.getHeight();
-        
-        // Set white text color
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        
-        // Choose font based on screen size - use smaller font for date
-        var dateFont = Graphics.FONT_MEDIUM;
-        var dayFont = Graphics.FONT_MEDIUM;
-        if (width < 150) {
-            dateFont = Graphics.FONT_SMALL;
-            dayFont = Graphics.FONT_SMALL;
+
+        var b = bubble(dc);
+        if (mPage == 0) {
+            drawSummary(dc, b);
+        } else {
+            drawDetails(dc, b);
         }
-        
-        // PRIORITY 2: Check if we have Hebrew date data
-        if (mHebrewDateString == null || mHebrewDateString.length() == 0) {
-            dc.drawText(
-                width / 2,
-                height / 2,
-                dateFont,
-                "טוען...",
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-            return;
+        drawCompass(dc, b[0], b[1], b[2]);
+    }
+
+    function drawSummary(dc, b) {
+        var w = dc.getWidth();
+        var h = dc.getHeight();
+        var t = mToday;
+        var c = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
+        var top = b[1] + b[2] + 4;                   // just below the bubble
+        var sideX = (b[0] - b[2]) / 2;               // centre of the area left of the bubble
+
+        dc.drawText(sideX, top * 0.30, Graphics.FONT_SMALL, Today.dayLabel(t), c);
+        dc.drawText(sideX, top * 0.72, Graphics.FONT_SMALL, HebrewText.numeral(t["y"]), c);
+        dc.drawText(w / 2, top + 16, Graphics.FONT_MEDIUM, HebrewText.date(t["y"], t["m"], t["d"]), c);
+
+        var font = Graphics.FONT_XTINY;
+        var lh = dc.getFontHeight(font);
+        var y = top + 34 + lh / 2;
+        var bottom = h - 12;
+        var lines = Today.infoLines(t);
+        var hasTimes = mStartTime != null && mEndTime != null;
+        var maxLines = hasTimes ? 1 : 3;
+        for (var i = 0; i < lines.size() && i < maxLines && y < bottom; i++) {
+            dc.drawText(w / 2, y, font, fit(dc, lines[i], font, w - 30), c);
+            y += lh;
         }
-        
-        // PRIORITY 3: Draw Hebrew text FIRST (main feature)
-        // Shift text left so it clears the compass circle in the top-right corner
-        // Keep date text clear of the compass circle (top-right, radius 20 at x=width-25)
-        var circleLeft = width - 57;  // left edge of enlarged circle (width-30-27)
-        var textX = circleLeft / 2;
-        var hasHallel = (mHallelText != null);
-        var showTimes = (mIsFriday || mIsErevYomTov) && mShabbatStartTime != null && mShabbatEndTime != null;
-        var dayY = showTimes ? (height / 2 - 35) : (height / 2 - 25);
-        var dateY = showTimes ? (height / 2 - 10) : (height / 2 + (hasHallel ? 0 : 10));
-
-        // Draw day of week (top line)
-        dc.drawText(
-            textX,
-            dayY,
-            dayFont,
-            mDayName,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
-        
-        // Draw Hebrew date
-        dc.drawText(
-            textX,
-            dateY,
-            dateFont,
-            mHebrewDateString,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
-
-        // Draw Hallel indicator below date (when applicable)
-        if (hasHallel) {
-            dc.drawText(
-                textX,
-                dateY + 20,
-                Graphics.FONT_SMALL,
-                mHallelText,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-            );
-        }
-
-        // Draw candle lighting / havdalah times (Friday or Erev Yom Tov)
-        System.println("DISPLAY: showTimes=" + showTimes + " start=" + mShabbatStartTime + " end=" + mShabbatEndTime);
-        if (showTimes) {
-            var shabbatFont = Graphics.FONT_SMALL;
-            
-            var startTime = formatTime(mShabbatStartTime);
-            var endTime = formatTime(mShabbatEndTime);
-            System.println("DISPLAY: Showing times: " + startTime + " / " + endTime);
-            
-            // Draw Shabbat times: split at screen center so label and time never overlap
-            var split = width / 2;
-            var y1 = height / 2 + 20;
-            var y2 = height / 2 + 40;
-
-            // Small dot below times when location is from cache (not yet confirmed fresh fix)
+        if (hasTimes) {
+            drawTimeRow(dc, w / 2, y, font, "כניסה:", formatTime(mStartTime));
+            drawTimeRow(dc, w / 2, y + lh, font, "יציאה:", formatTime(mEndTime));
             if (mUsingCachedGps) {
-                dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-                dc.fillCircle(split, height / 2 + 55, 3);
+                dc.fillCircle(w / 2, y + lh + lh / 2 + 3, 2);    // times from a cached location
             }
+        }
+    }
 
-            dc.drawText(split - 3, y1, shabbatFont, "כניסה:", Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
-            dc.drawText(split + 3, y1, shabbatFont, startTime, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-            dc.drawText(split - 3, y2, shabbatFont, "יציאה:", Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
-            dc.drawText(split + 3, y2, shabbatFont, endTime,   Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+    function drawDetails(dc, b) {
+        var w = dc.getWidth();
+        var h = dc.getHeight();
+        var t = mToday;
+        var c = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
+        var top = b[1] + b[2] + 4;
+        var sideX = (b[0] - b[2]) / 2;
+        var font = Graphics.FONT_XTINY;
+        var lh = dc.getFontHeight(font);
+
+        if (t["sunset"] != null) {
+            dc.drawText(sideX, top * 0.30, font, "שקיעה", c);
+            dc.drawText(sideX, top * 0.70, Graphics.FONT_SMALL, formatTime(t["sunset"]), c);
+        } else {
+            dc.drawText(sideX, top * 0.30, font, "אין מיקום", c);
+            dc.drawText(sideX, top * 0.70, font, "GPS", c);
         }
-        
-        // PRIORITY 5: Draw compass in top-right circle (secondary feature)
-        drawCompass(dc, width, height);
+
+        var lines = Today.infoLines(t);
+        if (lines.size() == 0) {
+            lines.add(HebrewText.date(t["y"], t["m"], t["d"]));
+        }
+        var y = top + lh / 2 + 2;
+        var bottom = h - 12;
+        for (var i = 0; i < lines.size() && y < bottom; i++) {
+            dc.drawText(w / 2, y, font, fit(dc, lines[i], font, w - 30), c);
+            y += lh;
+        }
     }
-    
-    // Draw compass arrow in top-right circle
-    function drawCompass(dc, width, height) {
-        // Circle position (top-right, matching hardware circle)
-        var circleCenterX = width - 30;
-        var circleCenterY = 30;
-        var circleRadius = 27;
-        
-        // Check if GPS is fully acquired and locked
-        if (!mGpsAvailable || mBearingToJerusalem == null) {
-            // Draw GPS acquisition indicator
-            drawGpsAcquisition(dc, circleCenterX, circleCenterY, circleRadius);
+
+    // Label and time on either side of the centre so mixed Hebrew / digits never reorder.
+    function drawTimeRow(dc, x, y, font, label, time) {
+        dc.drawText(x - 3, y, font, label, Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(x + 3, y, font, time, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+    }
+
+    // Drop the "פרשת " prefix when a long parasha name does not fit.
+    function fit(dc, s, font, maxW) {
+        if (dc.getTextWidthInPixels(s, font) > maxW && s.find("פרשת ") == 0) {
+            return s.substring(5, s.length());
+        }
+        return s;
+    }
+
+    function drawCompass(dc, cx, cy, r) {
+        if (!mGpsAvailable || mBearingToJerusalem == null || mCompassHeading == null || mArrowAngle == null) {
+            drawGpsAcquisition(dc, cx, cy, r);
             return;
         }
-        
-        // Check if compass heading is available
-        if (mCompassHeading == null || mArrowAngle == null) {
-            // Draw GPS acquisition indicator (waiting for compass)
-            drawGpsAcquisition(dc, circleCenterX, circleCenterY, circleRadius);
-            return;
-        }
-        
-        // GPS locked and compass available - draw arrow pointing toward Jerusalem
-        drawArrow(dc, circleCenterX, circleCenterY, circleRadius, mArrowAngle);
+        drawArrow(dc, cx, cy, r, mArrowAngle);
     }
-    
-    // Draw GPS acquisition indicator (like default Garmin GPS app)
+
+    // GPS acquisition ring, like the native GPS screen.
     function drawGpsAcquisition(dc, centerX, centerY, radius) {
-        // Draw background circle outline (gray) so we can see where arc fills
         dc.setPenWidth(3);
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawCircle(centerX, centerY, radius);
-        
-        // Draw "GPS" text with quality percentage
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            centerX,
-            centerY - 5,
-            Graphics.FONT_XTINY,
-            "GPS",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
-        dc.drawText(
-            centerX,
-            centerY + 5,
-            Graphics.FONT_XTINY,
-            mGpsQuality + "%",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
-        
-        // Draw thick filled arc based on GPS quality (0-100%)
+        dc.drawText(centerX, centerY - 5, Graphics.FONT_XTINY, "GPS",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(centerX, centerY + 5, Graphics.FONT_XTINY, mGpsQuality + "%",
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         if (mGpsQuality > 0) {
-            // Calculate arc angle (0-360 degrees)
-            var arcAngle = (mGpsQuality * 360) / 100;
-            
-            // Set thick pen width for the arc (matching Garmin style)
             dc.setPenWidth(6);
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            
-            // Draw arc using drawArc if available, otherwise use thick line segments
-            // Start from top (270 degrees) and go clockwise
-            try {
-                // Try using drawArc (available on newer devices)
-                dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 270, 270 + arcAngle);
-            } catch (ex) {
-                // Fallback: draw thick arc using line segments
-                var segments = arcAngle / 3;  // More segments for smoother arc
-                if (segments > 0) {
-                    for (var i = 0; i <= segments; i++) {
-                        var angle = 270 + (i * 3);  // Start from top (270°)
-                        var nextAngle = angle + 3;
-                        
-                        if (angle > 270 + arcAngle) {
-                            break;
-                        }
-                        
-                        var rad1 = Math.toRadians(angle);
-                        var rad2 = Math.toRadians(nextAngle);
-                        
-                        var x1 = centerX + radius * Math.cos(rad1);
-                        var y1 = centerY + radius * Math.sin(rad1);
-                        var x2 = centerX + radius * Math.cos(rad2);
-                        var y2 = centerY + radius * Math.sin(rad2);
-                        
-                        dc.drawLine(x1, y1, x2, y2);
-                    }
-                }
-            }
-            
-            // Reset pen width
-            dc.setPenWidth(1);
+            dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 270, 270 + mGpsQuality * 360 / 100);
         }
+        dc.setPenWidth(1);
     }
-    
-    // Classic two-tone compass needle, works on B&W screens:
-    // - White filled tip  → toward Jerusalem (solid white, visible on black)
-    // - Black filled tail → white outline makes it visible against black background
-    // - White center dot  → clean join between the two halves
-    function drawArrow(dc, centerX, centerY, radius, angleDegrees) {
-        var angleRad  = Math.toRadians(angleDegrees);
-        var perpAngle = angleRad + Math.PI / 2.0;
 
+    // Two-tone needle that reads on black-and-white screens: solid tip toward
+    // Jerusalem, outlined tail, centre dot.
+    function drawArrow(dc, centerX, centerY, radius, angleDegrees) {
+        var angleRad = Math.toRadians(angleDegrees);
+        var perpAngle = angleRad + Math.PI / 2.0;
         var sinA = Math.sin(angleRad);
         var cosA = Math.cos(angleRad);
         var sinP = Math.sin(perpAngle);
         var cosP = Math.cos(perpAngle);
 
-        var tipDist  = radius * 0.85;
-        var tailDist = radius * 0.55;
-        var wingDist = radius * 0.28;
+        var tipX = centerX + radius * 0.85 * sinA;
+        var tipY = centerY - radius * 0.85 * cosA;
+        var tailX = centerX - radius * 0.55 * sinA;
+        var tailY = centerY + radius * 0.55 * cosA;
+        var leftX = centerX + radius * 0.28 * sinP;
+        var leftY = centerY - radius * 0.28 * cosP;
+        var rightX = centerX - radius * 0.28 * sinP;
+        var rightY = centerY + radius * 0.28 * cosP;
 
-        var tipX   = centerX + tipDist  * sinA;
-        var tipY   = centerY - tipDist  * cosA;
-        var tailX  = centerX - tailDist * sinA;
-        var tailY  = centerY + tailDist * cosA;
-        var leftX  = centerX + wingDist * sinP;
-        var leftY  = centerY - wingDist * cosP;
-        var rightX = centerX - wingDist * sinP;
-        var rightY = centerY + wingDist * cosP;
-
-        // Tail: fill black then white outline — visible as hollow on black screen
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
         dc.fillPolygon([[tailX, tailY], [leftX, leftY], [rightX, rightY]]);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawLine(tailX, tailY, leftX, leftY);
         dc.drawLine(tailX, tailY, rightX, rightY);
-        // shared base line drawn after tip so tip overdraw covers it cleanly
-
-        // Tip: solid white toward Jerusalem
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_WHITE);
         dc.fillPolygon([[tipX, tipY], [leftX, leftY], [rightX, rightY]]);
-
-        // Center dot to cleanly join the two halves
         dc.fillCircle(centerX, centerY, 2);
     }
 
     function onHide() {
-        // Disable GPS location events when view is hidden
         Position.enableLocationEvents(Position.LOCATION_DISABLE, method(:onPosition));
-        
-        // Disable sensor events to save battery
         if (mSensorListenerActive) {
             try {
                 Sensor.enableSensorEvents(null);
             } catch (ex) {
-                // Failed to disable
             }
             mSensorListenerActive = false;
         }
+    }
+}
+
+class HebrewDateDelegate extends WatchUi.BehaviorDelegate {
+
+    hidden var mView;
+
+    function initialize(view) {
+        BehaviorDelegate.initialize();
+        mView = view;
+    }
+
+    function onSelect() {
+        mView.togglePage();
+        return true;
     }
 }
