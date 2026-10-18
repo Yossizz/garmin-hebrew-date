@@ -1,51 +1,43 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ./build.sh [build|sim|demo|test|release|iq]   (DEVICE=descentg1 by default)
+#   build    debug .prg            sim      debug .prg + run in the simulator
+#   demo     simulator run pretending it is Friday 15:00 in Tel Aviv
+#   test     run the unit tests    release  release .prg (sideload)
+#   iq       release .iq package for the Connect IQ Store
+set -euo pipefail
+cd "$(dirname "$0")"
 
-# Build script for Hebrew Date Data Field
-# Requires Garmin Connect IQ SDK to be installed
-
-# Configuration
-DEVICE="descentg1"
-OUTPUT="HebrewDate.prg"
-JUNGLE_FILE="monkey.jungle"
-
-# Add SDK to PATH
-export PATH="$PATH:$HOME/Library/Application Support/Garmin/ConnectIQ/Sdks/connectiq-sdk-mac-8.4.0-2025-12-03-5122605dc/bin"
-
-# Check if monkeyc is available
-if ! command -v monkeyc &> /dev/null; then
-    echo "Error: monkeyc command not found"
-    echo "Please check SDK installation in:"
-    echo "$HOME/Library/Application Support/Garmin/ConnectIQ/Sdks/"
-    exit 1
+if ! java -version >/dev/null 2>&1 && [ -d /opt/homebrew/opt/openjdk@21/bin ]; then
+    export PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH"
 fi
+CIQ="$HOME/Library/Application Support/Garmin/ConnectIQ"
+[ -f "$CIQ/current-sdk.cfg" ] || { echo "No current SDK: open SDK Manager and click 'Use as current SDK'" >&2; exit 1; }
+SDK="$(tr -d '\n' < "$CIQ/current-sdk.cfg")"
+SDK="${SDK%/}"
+DEVICE="${DEVICE:-descentg1}"
 
-# Check for developer key (try local first, then global)
-DEV_KEY="developer_key"
-if [ ! -f "$DEV_KEY" ]; then
-    if [ -f "$HOME/.Garmin/ConnectIQ/developer_key" ]; then
-        DEV_KEY="$HOME/.Garmin/ConnectIQ/developer_key"
-    else
-        echo "Warning: Developer key not found"
-        echo "Looked in: ./developer_key and $HOME/.Garmin/ConnectIQ/developer_key"
-        exit 1
-    fi
-fi
+# Developer key: ./developer_key, ~/.Garmin/ConnectIQ/developer_key, or ~/.connectiq-keys/developer_key.der
+KEY="${KEY:-}"
+for k in developer_key "$HOME/.Garmin/ConnectIQ/developer_key" "$HOME/.connectiq-keys/developer_key.der"; do
+    [ -z "$KEY" ] && [ -f "$k" ] && KEY="$k"
+done
+[ -n "$KEY" ] || { echo "No developer key found" >&2; exit 1; }
 
-# Build command
-echo "Building Hebrew Date Data Field for $DEVICE..."
-echo "Using developer key: $DEV_KEY"
+mkdir -p bin
+mc() { "$SDK/bin/monkeyc" -f monkey.jungle -y "$KEY" -w "$@"; }
 
-monkeyc \
-    -d "$DEVICE" \
-    -f "$JUNGLE_FILE" \
-    -o "$OUTPUT" \
-    -y "$DEV_KEY" \
-    -w
-
-if [ $? -eq 0 ]; then
-    echo "Build successful! Output: $OUTPUT"
-    echo "Copy this file to your Garmin device's GARMIN/APPS folder"
-else
-    echo "Build failed!"
-    exit 1
-fi
+case "${1:-build}" in
+    build)   mc -d "$DEVICE" -o "bin/HebrewDate-$DEVICE.prg" ;;
+    sim)     mc -d "$DEVICE" -o "bin/HebrewDate-$DEVICE.prg"
+             pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
+             "$SDK/bin/monkeydo" "bin/HebrewDate-$DEVICE.prg" "$DEVICE" ;;
+    demo)    "$SDK/bin/monkeyc" -f "monkey.jungle;demo.jungle" -y "$KEY" -w -d "$DEVICE" -o "bin/HebrewDate-demo.prg"
+             pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
+             "$SDK/bin/monkeydo" bin/HebrewDate-demo.prg "$DEVICE" ;;
+    test)    mc -d "$DEVICE" -o "bin/HebrewDate-test.prg" --unit-test
+             pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
+             "$SDK/bin/monkeydo" bin/HebrewDate-test.prg "$DEVICE" -t ;;
+    release) mc -d "$DEVICE" -o "bin/HebrewDate.prg" -r ;;
+    iq)      mc -e -o bin/HebrewDate.iq -r ;;
+    *)       echo "usage: $0 [build|sim|demo|test|release|iq]" >&2; exit 2 ;;
+esac

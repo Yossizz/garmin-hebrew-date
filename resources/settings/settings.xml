@@ -1,0 +1,8 @@
+<settings>
+    <setting propertyKey="@Properties.Israel" title="@Strings.IsraelTitle">
+        <settingConfig type="boolean"/>
+    </setting>
+    <setting propertyKey="@Properties.SunsetSwitch" title="@Strings.SunsetSwitchTitle">
+        <settingConfig type="boolean"/>
+    </setting>
+</settings>

@@ -1,0 +1,2 @@
+# ./build.sh demo: include the Shabbat demo clock/location instead of the real ones
+base.excludeAnnotations = noDemo

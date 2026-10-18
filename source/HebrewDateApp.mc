@@ -1,17 +1,22 @@
 using Toybox.Application;
 using Toybox.WatchUi;
 
+(:glance)
 class HebrewDateFieldApp extends Application.AppBase {
 
     function initialize() {
         AppBase.initialize();
     }
 
-    // Return the initial view of your application here
     function getInitialView() {
-        return [ new HebrewDateView() ];
+        var view = new HebrewDateView();
+        return [view, new HebrewDateDelegate(view)];
     }
 
+    (:glance)
+    function getGlanceView() {
+        return [new HebrewDateGlanceView()];
+    }
 }
 
 function getApp() {
