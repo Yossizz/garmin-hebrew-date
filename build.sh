@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ./build.sh [build|sim|demo|test|release|iq]   (DEVICE=descentg1 by default)
 #   build    debug .prg            sim      debug .prg + run in the simulator
-#   demo     simulator run pretending it is Friday 15:00 in Tel Aviv
+#   demo     simulator run in Tel Aviv on the coming Friday 15:00, or DEMO_DATE=YYYY-MM-DD [DEMO_TIME=HH:MM]
 #   test     run the unit tests    release  release .prg (sideload)
 #   iq       release .iq package for the Connect IQ Store
 set -euo pipefail
@@ -31,7 +31,14 @@ case "${1:-build}" in
     sim)     mc -d "$DEVICE" -o "bin/HebrewDate-$DEVICE.prg"
              pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
              "$SDK/bin/monkeydo" "bin/HebrewDate-$DEVICE.prg" "$DEVICE" ;;
-    demo)    "$SDK/bin/monkeyc" -f "monkey.jungle;demo.jungle" -y "$KEY" -w -d "$DEVICE" -o "bin/HebrewDate-demo.prg"
+    demo)    # DEMO_DATE=2026-12-10 [DEMO_TIME=18:30] ./build.sh demo  (default: coming Friday 15:00)
+             mkdir -p bin/demo-src
+             start=0
+             if [ -n "${DEMO_DATE:-}" ]; then
+                 start=$(date -j -f "%Y-%m-%d %H:%M" "$DEMO_DATE ${DEMO_TIME:-15:00}" +%s)
+             fi
+             printf '(:shabbatDemo, :glance)\nmodule DemoConfig {\n    const START = %s;\n}\n' "$start" > bin/demo-src/DemoConfig.mc
+             "$SDK/bin/monkeyc" -f "monkey.jungle;demo.jungle" -y "$KEY" -w -d "$DEVICE" -o "bin/HebrewDate-demo.prg"
              pgrep -f 'ConnectIQ.app' >/dev/null || { "$SDK/bin/connectiq" & sleep 5; }
              "$SDK/bin/monkeydo" bin/HebrewDate-demo.prg "$DEVICE" ;;
     test)    mc -d "$DEVICE" -o "bin/HebrewDate-test.prg" --unit-test
