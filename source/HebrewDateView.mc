@@ -26,7 +26,7 @@ class HebrewDateView extends WatchUi.View {
     hidden var mBearingToJerusalem = null;
     hidden var mGpsAvailable = false;
     hidden var mGpsQuality = 0;
-    hidden var mPreviousGpsQuality = 0;
+    hidden var mLocked = false;       // got a real (non-cached) fix since the widget opened
     hidden var mCompassHeading = null;
     hidden var mArrowAngle = null;
     hidden var mSensorListenerActive = false;
@@ -107,29 +107,61 @@ class HebrewDateView extends WatchUi.View {
             return;
         }
         mGpsQuality = 0;
-        mPreviousGpsQuality = 0;
+        mLocked = false;
 
-        // Use the last-known position immediately; keep GPS running for a fresh fix
-        // (important when travelling).
+        // Use the last-known position immediately (marked as cached until a real fix);
+        // keep GPS running for a fresh fix - important when travelling.
         var lastInfo = Position.getInfo();
         if (lastInfo != null && lastInfo.position != null &&
             lastInfo.accuracy != Position.QUALITY_NOT_AVAILABLE) {
             var coords = lastInfo.position.toDegrees();
             if (validCoords(coords)) {
                 setLocation(coords[0].toDouble(), coords[1].toDouble(), true);
-                mGpsQuality = Compass.getGpsQuality(lastInfo.accuracy);
-                enableCompass();
             }
         }
-        Position.enableLocationEvents(Position.LOCATION_CONTINUOUS, method(:onPosition));
+        if (mGpsAvailable) {
+            enableCompass();
+        }
+        startGps();
         refresh();
         WatchUi.requestUpdate();
     }
 
+    // Rejects the simulator's 180/180 and the 0/0 some firmwares report before any fix.
     function validCoords(coords) {
-        return coords != null && coords.size() >= 2 &&
-            coords[0].toDouble() >= -90.0 && coords[0].toDouble() <= 90.0 &&
-            coords[1].toDouble() > -180.0 && coords[1].toDouble() < 180.0;
+        if (coords == null || coords.size() < 2) {
+            return false;
+        }
+        var lat = coords[0].toDouble();
+        var lon = coords[1].toDouble();
+        return lat >= -90.0 && lat <= 90.0 && lon > -180.0 && lon < 180.0 &&
+            !(lat.abs() < 0.5 && lon.abs() < 0.5);
+    }
+
+    // Multi-GNSS for a faster lock: the best configuration the watch supports, then
+    // GPS + Galileo, then plain GPS.
+    function startGps() {
+        var cb = method(:onPosition);
+        if (Position has :hasConfigurationSupport) {
+            var configs = [Position.CONFIGURATION_GPS_GLONASS_GALILEO_BEIDOU_L1,
+                           Position.CONFIGURATION_GPS_GALILEO, Position.CONFIGURATION_GPS_GLONASS];
+            for (var i = 0; i < configs.size(); i++) {
+                if (Position.hasConfigurationSupport(configs[i])) {
+                    try {
+                        Position.enableLocationEvents({ :acquisitionType => Position.LOCATION_CONTINUOUS,
+                                                        :configuration => configs[i] }, cb);
+                        return;
+                    } catch (ex) {
+                    }
+                }
+            }
+        }
+        try {
+            Position.enableLocationEvents({ :acquisitionType => Position.LOCATION_CONTINUOUS,
+                :constellations => [Position.CONSTELLATION_GPS, Position.CONSTELLATION_GALILEO] }, cb);
+        } catch (ex) {
+            Position.enableLocationEvents(Position.LOCATION_CONTINUOUS, cb);
+        }
     }
 
     function setLocation(lat, lon, cached) {
@@ -169,24 +201,26 @@ class HebrewDateView extends WatchUi.View {
         if (info == null) {
             return;
         }
-        mPreviousGpsQuality = mGpsQuality;
         mGpsQuality = Compass.getGpsQuality(info.accuracy);
-        if (info.position != null) {
+        var fresh = info.accuracy != null && info.accuracy >= Position.QUALITY_POOR;
+        if (fresh && info.position != null) {
             var coords = info.position.toDegrees();
             if (validCoords(coords)) {
-                var fresh = info.accuracy != Position.QUALITY_LAST_KNOWN;
-                setLocation(coords[0].toDouble(), coords[1].toDouble(), !fresh);
-                if (fresh) {
+                setLocation(coords[0].toDouble(), coords[1].toDouble(), false);
+                enableCompass();
+                if (!mLocked) {
+                    // First real fix: vibrate and recompute sunset / Shabbat times
+                    mLocked = true;
                     refresh();
-                    if (mPreviousGpsQuality < 50) {
-                        try {
-                            Attention.vibrate([new Attention.VibeProfile(100, 100)]);
-                        } catch (ex) {
-                        }
+                    try {
+                        Attention.vibrate([new Attention.VibeProfile(100, 200)]);
+                    } catch (ex) {
                     }
-                    // Stop GPS to save battery once we have a real fix
+                }
+                // Keep refining a 2-D fix; stop once it is a usable 3-D fix to save battery
+                if (info.accuracy >= Position.QUALITY_USABLE) {
+                    refresh();
                     Position.enableLocationEvents(Position.LOCATION_DISABLE, method(:onPosition));
-                    enableCompass();
                 }
             }
         }
@@ -306,12 +340,24 @@ class HebrewDateView extends WatchUi.View {
         if (lines.size() == 0) {
             lines.add(HebrewText.date(t["y"], t["m"], t["d"]));
         }
+        // Bottom rows: GPS state, compass heading and bearing to Jerusalem, for checking
+        // the needle against the watch's own compass.
         var y = top + lh / 2 + 2;
         var bottom = h - 12;
-        for (var i = 0; i < lines.size() && y < bottom; i++) {
+        var diagRows = 3;
+        var maxLines = (bottom - y) / lh - diagRows;
+        for (var i = 0; i < lines.size() && i < maxLines; i++) {
             dc.drawText(w / 2, y, font, fit(dc, lines[i], font, w - 30), c);
             y += lh;
         }
+        var gps = mLocked ? "נעול" : (mGpsAvailable ? "שמור " + mGpsQuality + "%" : "מחפש " + mGpsQuality + "%");
+        drawTimeRow(dc, w / 2, y, font, "GPS:", gps);
+        drawTimeRow(dc, w / 2, y + lh, font, "מצפן:", degrees(mCompassHeading));
+        drawTimeRow(dc, w / 2, y + 2 * lh, font, "ירושלים:", degrees(mBearingToJerusalem));
+    }
+
+    function degrees(v) {
+        return (v == null) ? "--" : v.toNumber() + "°";
     }
 
     // Label and time on either side of the centre so mixed Hebrew / digits never reorder.
@@ -334,6 +380,26 @@ class HebrewDateView extends WatchUi.View {
             return;
         }
         drawArrow(dc, cx, cy, r, mArrowAngle);
+        if (mUsingCachedGps) {
+            // Arrow is from the last-known position: show the GPS progress until a real fix
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            drawProgress(dc, cx, cy, r, 3);
+        }
+    }
+
+    // Arc clockwise from 12 o'clock, proportional to GPS quality.
+    function drawProgress(dc, cx, cy, r, pen) {
+        dc.setPenWidth(pen);
+        if (mGpsQuality >= 100) {
+            dc.drawCircle(cx, cy, r);
+        } else if (mGpsQuality > 0) {
+            var end = 90 - mGpsQuality * 360 / 100;
+            if (end < 0) {
+                end += 360;
+            }
+            dc.drawArc(cx, cy, r, Graphics.ARC_CLOCKWISE, 90, end);
+        }
+        dc.setPenWidth(1);
     }
 
     // GPS acquisition ring, like the native GPS screen.
@@ -346,11 +412,7 @@ class HebrewDateView extends WatchUi.View {
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         dc.drawText(centerX, centerY + 9, Graphics.FONT_XTINY, mGpsQuality + "%",
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        if (mGpsQuality > 0) {
-            dc.setPenWidth(6);
-            dc.drawArc(centerX, centerY, radius, Graphics.ARC_CLOCKWISE, 270, 270 + mGpsQuality * 360 / 100);
-        }
-        dc.setPenWidth(1);
+        drawProgress(dc, centerX, centerY, radius, 6);
     }
 
     // Two-tone needle that reads on black-and-white screens: solid tip toward
