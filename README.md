@@ -1,153 +1,89 @@
-# Hebrew Date App for Garmin Watches
+# Hebrew Date for Garmin Watches
 
-A Garmin Connect IQ application that displays the Hebrew calendar date in Hebrew characters, a GPS compass pointing to Jerusalem, and Shabbat candle lighting / havdalah times.
+A Garmin Connect IQ widget and glance that shows today's Hebrew date in Hebrew letters, together with holidays, the weekly parasha, the Omer count, Shabbat / Yom Tov times and a compass that points to Jerusalem.
 
 ## Features
 
-**Hebrew Calendar**
-- Current Hebrew date with day of week in Hebrew
-- Hebrew numerals (כ״ה, ט״ו, etc.)
-- Hebrew month names (תשרי, חשוון, כסלו, etc.)
-- Full leap year support (אדר א׳ and אדר ב׳)
-- Hallel indicator: shows **הלל** (full) or **חצי הלל** (half) below the date on days when Hallel is recited
+**Hebrew calendar**
+- Day, date and year in Hebrew, for example יום ראשון · ז׳ חשוון · תשפ״ז, including leap years (אדר א׳ / אדר ב׳).
+- The date changes at **local sunset**, using the last GPS position. After sunset the day reads ליל ... (this can be turned off in settings).
+- The conversion follows Reingold & Dershowitz and is checked day by day against [pyluach](https://github.com/simlist/pyluach) for 5780–5810.
 
-**Praying Compass**
-- GPS-powered classic two-tone needle pointing to Jerusalem
-- White tip toward Jerusalem, outlined tail pointing away
-- Smooth rotation driven by magnetometer sensor events
-- GPS acquisition circle fills while acquiring signal
-- Vibration feedback on GPS lock
+**Holidays and readings**
+- Festivals, Chol HaMoed and erev days, plus fasts with their postponements: Gedaliah, 10 Tevet, Esther, 17 Tammuz and 9 Av.
+- Rosh Chodesh, Chanukah (day count), Purim, Shushan Purim and Purim Katan.
+- Israeli national days with the official date shifts: Yom HaShoah, HaZikaron, HaAtzmaut and Yerushalayim.
+- The weekly parasha for the coming Shabbat, including double parshiyot, using Dr. Irv Bromberg's rules.
+- Sefirat HaOmer and Hallel (full / half).
+- An **Israel / Diaspora** setting covers one- or two-day Yom Tov, Hallel and the parasha schedule.
 
-**GPS Fast-Lock**
-- Uses last-known cached position instantly on startup for immediate compass display
-- Continues acquiring a fresh fix in background (important when traveling abroad)
-- Once a real fix arrives, bearing and Shabbat times are updated automatically
-- Small dot indicator shown when times are based on cached location
+**Shabbat and Yom Tov times**
+- Shown on Friday, on Shabbat and on Erev Yom Tov (including a Yom Tov that runs into Shabbat).
+- Candle lighting is sunset − 18 min, or − 35 min in Jerusalem. Havdalah is sunset + 40 min.
+- Sunset uses the USNO sunrise equation.
 
-**Shabbat & Yom Tov Times**
-- Shown on Fridays (Shabbat) and Erev Yom Tov days
-- Candle lighting (כניסה): tonight's sunset − 35 min (Jerusalem) / − 18 min (elsewhere)
-- Havdalah (יציאה): end-of-holiday sunset + 40 minutes (Israeli standard / Gra opinion)
-- Yom Tov coverage (Israeli minhag): Erev Rosh Hashana, Rosh Hashana day 1, Erev Yom Kippur, Erev Sukkot, Erev Shemini Atzeret, Erev Pesach, Erev last day of Pesach, Erev Shavuot
-- Astronomical sunset calculated via USNO sunrise equation
-- Times auto-update when fresh GPS confirms your actual location
+**Compass to Jerusalem**
+- A two-tone needle in the Descent G1 sub-screen.
+- Uses multi-GNSS for a faster lock, vibrates on the first fix, and shows a progress ring while it is still working from the cached position.
+- The heading is polled 4× per second while the widget is open.
 
-**Compatible Devices**
-- Garmin Descent G1 / G1 Solar
-- Garmin Descent Mk1
+## On the watch
 
-## Display
+- **Glance:** day, date and the most relevant extra line (holiday, Omer or parasha).
+- **Widget:** START switches between:
+  - **Summary:** day, year, date, observances and, when relevant, כניסה / יציאה times.
+  - **Details:** sunset, every observance line, and diagnostics (GPS state, compass heading, bearing to Jerusalem).
+- **Settings** (Connect IQ app): Israel calendar; new date at sunset.
 
-**Normal days:**
-```
-      שני         ← day of week        [compass]
-    י״ב סיוון     ← Hebrew date
-```
+Compatible device: **Garmin Descent G1 / G1 Solar**. The layout is built around its round sub-screen.
 
-**Days with Hallel (e.g. Rosh Chodesh):**
-```
-      שני                              [compass]
-    א׳ סיוון
-    חצי הלל      ← Hallel indicator
-```
+## Building
 
-**Fridays:**
-```
-      שישי                             [compass]
-    כ׳ סיוון
-   כניסה: | 19:10
-   יציאה: | 20:23
-      •              ← dot = cached location, disappears after fresh GPS fix
-```
-
-## Installation
-
-1. Download `HebrewDate.prg` from [Releases](../../releases)
-2. Connect Garmin watch via USB
-3. Copy to `GARMIN/APPS/HebrewDate.prg`
-4. Eject and restart watch (hold LIGHT to power off, then on)
-5. Launch "Hebrew Date" from the app menu
-
-## Building from Source
+Requires the Connect IQ SDK (SDK Manager, current SDK + Descent G1 device), Java, and a developer key. `build.sh` looks for `./developer_key`, `~/.Garmin/ConnectIQ/developer_key` or `~/.connectiq-keys/developer_key.der`.
 
 ```bash
-git clone https://github.com/Yossizz/garmin-hebrew-date.git
-cd garmin-hebrew-date
-
-# Generate developer key (one time)
-openssl genrsa -out developer_key 4096
-
-# Build for device
-./build.sh
-
-# Build and launch in simulator
-./run_simulator.sh
+./build.sh            # debug build -> bin/HebrewDate-descentg1.prg
+./build.sh sim        # debug build + run in the simulator
+./build.sh demo       # simulator run pretending it is Friday 15:00 in Tel Aviv (Shabbat times)
+./build.sh test       # unit tests + a 31-year calendar dump
+./build.sh release    # release .prg for sideloading
+./build.sh iq         # release .iq for the Connect IQ Store
 ```
 
-Requires Garmin Connect IQ SDK 8.x. See [BUILD.md](BUILD.md) for details.
+Verify the calendar against pyluach after changing calendar code:
 
-## Project Structure
-
-```
-garmin-hebrew-date/
-├── manifest.xml          # App configuration
-├── monkey.jungle         # Build settings
-├── build.sh              # Build script
-├── run_simulator.sh      # Build + launch simulator
-├── source/
-│   ├── HebrewDateApp.mc    # Application entry point
-│   ├── HebrewDateView.mc   # Main view, UI, GPS logic
-│   ├── HebrewCalendar.mc   # Hebrew calendar conversion
-│   ├── HebrewFont.mc       # Hebrew text utilities
-│   └── Compass.mc          # GPS, compass, sunset calculations
-└── resources/
-    ├── drawables.xml
-    ├── properties.xml
-    └── strings.xml
+```bash
+./build.sh test > /tmp/dump.txt
+pip install pyluach && python3 tools/verify_calendar.py /tmp/dump.txt
 ```
 
-## Technical Details
+## Project structure
 
-### Sunset Calculation
-
-Uses the USNO sunrise equation with fixes for Monkey C's 32-bit float limitations:
-- Works in J2000.0 offsets (~9652 days) rather than absolute Julian dates (~2461197) to avoid float32 precision loss
-- `fmod()` helper replaces `%` operator which only works on integers in Monkey C
-- Horizon angles: −0.833° for visible sunset (refraction corrected), −8.5° for nightfall
-
-### GPS Strategy
-
-1. `Position.getInfo()` called synchronously on startup — uses cached position instantly if available
-2. `LOCATION_CONTINUOUS` events started in background to acquire fresh fix
-3. On fresh fix (`accuracy != QUALITY_LAST_KNOWN`): bearing and Shabbat times recalculated with real location, GPS stopped to save battery
-4. Magnetometer driven by `onSensor` callback (event-driven, not polled) for smooth arrow rotation
-
-### Hebrew Calendar
-
-Gauss-based algorithm with:
-- Variable month lengths (29–30 days)
-- Leap year support (13 months)
-- Dehiyyot (postponement rules)
-
-### Hebrew Numerals
-
-- Geresh (׳) for single letters: א׳, ב׳
-- Gershayim (״) for compound: כ״ה, י״א
-- Special cases for 15 (ט״ו) and 16 (ט״ז)
+```
+source/
+├── HebrewDateApp.mc        # entry point (widget + glance)
+├── HebrewDateView.mc       # widget pages, GPS, compass, Shabbat times
+├── HebrewDateGlance.mc     # glance
+├── Today.mc                # "now": sunset switch, observances, parasha
+├── HebrewCalendar.mc       # JDN <-> Hebrew date (biblical month numbering, 1 = Nisan)
+├── HebrewText.mc           # Hebrew numerals, month / day / parasha names
+├── Holidays.mc             # festivals, fasts, Rosh Chodesh, Israeli days, Omer, Hallel, Erev Yom Tov
+├── Parasha.mc              # weekly Torah portion
+├── SunTimes.mc             # sunset, candle lighting, havdalah
+├── Compass.mc              # bearing / GPS quality helpers
+├── Demo.mc                 # real clock, or the Shabbat demo clock (./build.sh demo)
+└── *Test.mc                # unit tests and the calendar dump
+store/                      # Connect IQ Store icons, screenshot and listing text
+tools/verify_calendar.py    # compares the dump with pyluach
+```
 
 ## Troubleshooting
 
-**App doesn't appear:** Restart the watch after copying the `.prg` file.
+- **No vibration / arrow off:** go outside and wait for the vibration (the first fix). If the needle is still off, calibrate the compass in the watch's sensor settings and hold the watch level. On the details page, מצפן should match the watch's own compass app.
+- **Shabbat times show a dot:** the times come from a cached location; they update after the GPS fix.
+- **Date changed early or late:** the sunset switch uses the last GPS position. Open the widget once in a new place to refresh it.
 
-**Wrong date:** Ensure watch time is set correctly (requires GPS or manual set).
-
-**Compass arrow stuck:** Fixed in current version — arrow is now updated via sensor events rather than polling. If it still happens, restart the app.
-
-**Shabbat times show a dot:** Times are calculated from a cached GPS location. Wait a moment for a fresh GPS fix — the dot disappears and times update automatically.
-
-**Times seem off:** The app uses Israeli standard times (Gra opinion). Candle lighting = sunset − 35 min, havdalah = sunset + 40 min.
-
-## Hebrew Month Reference
+## Hebrew month reference
 
 | Hebrew | Transliteration | Gregorian |
 |--------|----------------|-----------|
@@ -165,20 +101,6 @@ Gauss-based algorithm with:
 | אלול | Elul | Aug–Sep |
 
 *Leap years: אדר א׳ (Adar I) and אדר ב׳ (Adar II)*
-
-## Roadmap
-
-- [x] GPS compass pointing to Jerusalem
-- [x] Shabbat candle lighting and havdalah times
-- [x] Fast GPS lock using cached position
-- [x] Accurate astronomical sunset calculation
-- [x] Travel-safe: recalculates times after fresh GPS fix
-- [ ] Widget version
-- [ ] Hebrew year display
-- [x] Hallel indicator (הלל / חצי הלל)
-- [x] Candle lighting & havdalah times for Jewish holidays (Yom Tov)
-- [ ] Jewish holidays
-- [ ] More Garmin devices
 
 ## License
 
